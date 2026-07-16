@@ -18,6 +18,8 @@ This package is a **Pi coding-agent extension** bridging WeChat iLink. Quality r
 | `process.stdin` / Node `readline` prompts while Pi TUI is active | TUI uses raw mode; stdin prompts inject prompt text into the editor or corrupt the frame. Use `ctx.ui.input` / `select` / `confirm` when `ctx.hasUI`. |
 | Multi-line `process.stderr.write` / `console.log` for QR art or banners in TUI mode | Alternate-screen TUI gets dirty; text can appear to “sit in” the input area. Use `ctx.ui.setWidget` / `notify` / `setStatus`. |
 | Overwriting `currentWechatRequest` while a WeChat reply slot is already owned | Races between `agent_end`→`agent_settled` and new inbound messages lose or cross replies. Treat slot-busy as busy and enqueue. |
+| Multi-Pi remote text without a hub route id | Must go through `pi-lark-hub` registration + default/reply/approval routing; never assume “the only Pi”. |
+| Starting `lark-cli` Feishu mode with empty allowlist | Forbidden; only `console` mode may allow empty allowlist for local tests. |
 
 ---
 
@@ -25,7 +27,8 @@ This package is a **Pi coding-agent extension** bridging WeChat iLink. Quality r
 
 | Pattern | Rule |
 |---------|------|
-| Busy-path remote tasks | Extension-owned FIFO (`wechatQueue`); drain **one** item on `agent_settled` **after** clearing current WeChat flags; submit with `pi.sendUserMessage(text)` **without** `deliverAs`. |
+| Busy-path remote tasks | Extension-owned FIFO (`wechatQueue` / lark `queue`); drain **one** item on `agent_settled` **after** clearing current remote flags; submit with `pi.sendUserMessage(text)` **without** `deliverAs`. |
+| Multi-Pi Feishu path | Use `pi-lark-hub` + `lark-bridge`; see [multi-pi-lark-hub.md](./multi-pi-lark-hub.md). |
 | Login pairing code | Implement `@wechatbot` `onVerifyCode` via `ctx.ui.input` when `hasUI`; **fail closed** (throw) when no UI — never rely on SDK stdin default. |
 | QR / login chrome | TUI: `setWidget` + status; clear widget on success, failure, `/wechat-stop`, `session_shutdown`. Headless: single-line URL on stderr only. |
 | Slot occupancy | Ingress treats `currentRunFromWechat \|\| currentWechatRequest \|\| drainingQueue \|\| !isIdle()` as busy → enqueue. |

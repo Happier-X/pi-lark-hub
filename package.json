@@ -1,7 +1,7 @@
 {
   "name": "pi-wechat-ilink",
   "version": "0.1.0",
-  "description": "Pi coding agent extension for the official WeChat iLink / ClawBot channel — remote chat, task completion notice, and dangerous command approval",
+  "description": "Pi coding agent extension for the official WeChat iLink / ClawBot channel — remote chat, task completion notice, and dangerous command approval. Also includes pi-lark-hub multi-Pi Feishu bridge (phase 0-5: register, route, task_end, approval, need_reply, optional lark-cli).",
   "type": "module",
   "license": "MIT",
   "author": "",
@@ -13,7 +13,9 @@
     "weixin",
     "ilink",
     "clawbot",
-    "extension"
+    "extension",
+    "feishu",
+    "lark"
   ],
   "repository": {
     "type": "git",
@@ -23,8 +25,13 @@
     "url": "https://github.com/Happier-X/pi-wechat-ilink/issues"
   },
   "homepage": "https://github.com/Happier-X/pi-wechat-ilink#readme",
+  "bin": {
+    "pi-lark-hub": "./scripts/pi-lark-hub.mjs"
+  },
   "files": [
     "src",
+    "scripts",
+    "docs",
     "README.md",
     "LICENSE",
     "CHANGELOG.md"
@@ -37,11 +44,14 @@
   "scripts": {
     "check": "node --check src/index.ts || true",
     "typecheck": "tsc --noEmit",
+    "test": "tsx --test src/hub/router.test.ts src/hub/config.test.ts src/hub/feishu-lark-cli.test.ts",
+    "hub": "tsx src/hub/cli.ts",
     "prepublishOnly": "npm run typecheck"
   },
   "dependencies": {
     "@wechatbot/wechatbot": "^2.2.0",
-    "qrcode-terminal": "^0.12.0"
+    "qrcode-terminal": "^0.12.0",
+    "ws": "^8.18.3"
   },
   "peerDependencies": {
     "@earendil-works/pi-coding-agent": "*"
@@ -54,6 +64,8 @@
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "*",
     "@types/node": "^22.15.0",
+    "@types/ws": "^8.18.1",
+    "tsx": "^4.20.3",
     "typescript": "^5.8.0"
   },
   "engines": {

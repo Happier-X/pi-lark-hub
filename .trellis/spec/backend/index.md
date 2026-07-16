@@ -18,6 +18,7 @@ This directory contains guidelines for backend development. Fill in each file wi
 | [Database Guidelines](./database-guidelines.md) | ORM patterns, queries, migrations | To fill |
 | [Error Handling](./error-handling.md) | Login fail-closed, queue/reply errors, TUI-safe surfaces | Filled |
 | [Quality Guidelines](./quality-guidelines.md) | No followUp for remote tasks; no stdin/stderr TUI chrome | Filled |
+| [Multi-Pi Lark Hub](./multi-pi-lark-hub.md) | Hub/bridge protocol, routing, config, Feishu modes | Filled |
 | [Logging Guidelines](./logging-guidelines.md) | Structured logging, log levels | To fill |
 
 ---

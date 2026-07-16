@@ -38,3 +38,36 @@ Busy-path WeChat tasks use extension-owned queue instead of Pi followUp; pairing
 ### Next Steps
 
 - None - task complete
+
+
+## Session 2: Multi-Pi 飞书 Hub 与 Bridge（阶段 0–5）
+
+**Date**: 2026-07-16
+**Task**: Multi-Pi 飞书 Hub 与 Bridge（阶段 0–5）
+**Branch**: `main`
+
+### Summary
+
+落地本机 pi-lark-hub + lark-bridge：多 Pi 注册/默认与回复路由、task_end、审批、/lark-ask need_reply、console 与可选 lark-cli 飞书出站；写入 multi-pi-lark-hub spec。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `d281231` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

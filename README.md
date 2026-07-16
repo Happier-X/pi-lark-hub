@@ -122,7 +122,7 @@ No public IP is required. The extension long-polls iLink.
 ## Develop
 
 ```bash
-git clone https://github.com/YOUR_GITHUB_USERNAME/pi-wechat-ilink.git
+git clone https://github.com/Happier-X/pi-wechat-ilink.git
 cd pi-wechat-ilink
 npm install
 ```
@@ -155,14 +155,14 @@ git init
 git add .
 git commit -m "feat: initial pi wechat ilink extension"
 git branch -M main
-git remote add origin https://github.com/YOUR_GITHUB_USERNAME/pi-wechat-ilink.git
+git remote add origin https://github.com/Happier-X/pi-wechat-ilink.git
 git push -u origin main
 ```
 
 Users can install from git:
 
 ```bash
-pi install git:github.com/YOUR_GITHUB_USERNAME/pi-wechat-ilink
+pi install git:github.com/Happier-X/pi-wechat-ilink
 ```
 
 ### npm

@@ -17,12 +17,12 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/YOUR_GITHUB_USERNAME/pi-wechat-ilink.git"
+    "url": "git+https://github.com/Happier-X/pi-wechat-ilink.git"
   },
   "bugs": {
-    "url": "https://github.com/YOUR_GITHUB_USERNAME/pi-wechat-ilink/issues"
+    "url": "https://github.com/Happier-X/pi-wechat-ilink/issues"
   },
-  "homepage": "https://github.com/YOUR_GITHUB_USERNAME/pi-wechat-ilink#readme",
+  "homepage": "https://github.com/Happier-X/pi-wechat-ilink#readme",
   "files": [
     "src",
     "README.md",

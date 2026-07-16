@@ -1,51 +1,55 @@
 # Error Handling
 
-> How errors are handled in this project.
+> Error handling for the Pi × WeChat iLink extension.
 
 ---
 
 ## Overview
 
-<!--
-Document your project's error handling conventions here.
+Errors are surface either as:
 
-Questions to answer:
-- What error types do you define?
-- How are errors propagated?
-- How are errors logged?
-- How are errors returned to clients?
--->
+1. **WeChat replies** to the inbound user (task submit/reply failures)
+2. **Pi UI** `notify` / `setStatus` (connection, send failures)
+3. **Thrown errors** that abort login when UI cannot collect required input
 
-(To be filled by the team)
+Prefer best-effort replies; never leave the TUI blocked on SDK stdin.
 
 ---
 
 ## Error Types
 
-<!-- Custom error classes/types -->
-
-(To be filled by the team)
+No custom error classes. Use `Error` with clear Chinese or bilingual messages for user-visible paths.
 
 ---
 
 ## Error Handling Patterns
 
-<!-- Try-catch patterns, error propagation -->
-
-(To be filled by the team)
+| Situation | Behavior |
+|-----------|----------|
+| `sendUserMessage` throws (idle or drain) | Clear current WeChat flags; reply WeChat “指令提交失败：…”. On drain, continue next queue item if still idle. |
+| WeChat `reply` / `stopTyping` throws | `status` / `notify` error; still clear current flags in `finally` so queue can drain. |
+| Login needs pairing code, `!hasUI` | **Fail closed**: throw — do not call SDK stdin readline. |
+| Login pairing cancelled / empty input | Throw “未输入配对码”; login catch clears QR chrome and notifies. |
+| Login / connect failure | `clearQrChrome`, null bot, clear status, `notify` error. |
+| Dangerous-command approval timeout | Treat as reject; block tool with timeout reason. |
 
 ---
 
-## API Error Responses
+## Validation & Error Matrix (login / queue)
 
-<!-- Standard error response format -->
-
-(To be filled by the team)
+| Input / state | Result |
+|---------------|--------|
+| TUI + pairing required | `ctx.ui.input` → trimmed code |
+| TUI + empty/cancel pairing | throw → login failed notify |
+| no UI + pairing required | throw “当前模式无 UI” |
+| Busy / slot busy + WeChat text | enqueue + WeChat queued ack (not an error) |
+| Drain submit failure | WeChat error reply; try next queued item |
 
 ---
 
 ## Common Mistakes
 
-<!-- Error handling mistakes your team has made -->
-
-(To be filled by the team)
+1. **Using Pi `followUp` for WeChat while busy** — abort dumps text into the editor. Use extension queue.
+2. **Assuming `isIdle()` alone means safe to start a WeChat run** — between drain submit and `agent_start`, or between `agent_end` and `agent_settled`, flags may still own the reply slot. Check `currentRunFromWechat` / `currentWechatRequest` / `drainingQueue`.
+3. **Relying on `@wechatbot` default verify-code prompt** — uses `process.stdin` and breaks TUI.
+4. **Writing QR to stderr in TUI** — corrupts alternate screen; use `setWidget`.

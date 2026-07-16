@@ -12,6 +12,9 @@
  * Incoming WeChat text becomes pi.sendUserMessage(). Pi's final answer is
  * replied through iLink. Dangerous bash calls can be approved by replying
  * "批准 <id>" or "拒绝 <id>" in WeChat.
+ *
+ * Busy-path WeChat tasks stay in an extension-owned FIFO (never Pi followUp),
+ * so Escape/abort cannot restore them into the TUI editor.
  */
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
@@ -22,6 +25,7 @@ import * as path from "node:path";
 
 const PACKAGE_VERSION = "0.1.0";
 const STATUS_KEY = "wechat-ilink";
+const QR_WIDGET_KEY = "wechat-ilink-qr";
 const APPROVAL_TIMEOUT_MS = 5 * 60 * 1000;
 const MAX_WECHAT_TEXT = 3500;
 
@@ -46,6 +50,12 @@ type PendingApproval = {
 	resolve: (decision: Decision) => void;
 	promise: Promise<Decision>;
 	done: boolean;
+};
+
+type QueuedWechatTask = {
+	msg: IncomingMessage;
+	text: string;
+	enqueuedAt: number;
 };
 
 type AssistantLikeMessage = {
@@ -90,6 +100,14 @@ function parseApproval(text: string): { decision: "approve" | "reject"; id?: str
 	return null;
 }
 
+function generateQrString(url: string): string {
+	let qr = "";
+	qrTerminal.generate(url, { small: true }, (value: string) => {
+		qr = value;
+	});
+	return qr;
+}
+
 export default function wechatILink(pi: ExtensionAPI) {
 	let bot: WeChatBot | null = null;
 	let connected = false;
@@ -102,6 +120,8 @@ export default function wechatILink(pi: ExtensionAPI) {
 	let localRunStartedAt = 0;
 	let lastProactiveNoticeAt = 0;
 	const approvals = new Map<string, PendingApproval>();
+	const wechatQueue: QueuedWechatTask[] = [];
+	let drainingQueue = false;
 
 	const storageDir = path.join(os.homedir(), ".pi", "agent", "wechat-ilink-state");
 
@@ -111,6 +131,55 @@ export default function wechatILink(pi: ExtensionAPI) {
 
 	const notify = (text: string, level: "info" | "warning" | "error" = "info") => {
 		if (activeCtx?.hasUI) activeCtx.ui.notify(text, level);
+	};
+
+	const clearQrChrome = (ctx?: ExtensionContext | null) => {
+		const uiCtx = ctx ?? activeCtx;
+		if (uiCtx?.hasUI) uiCtx.ui.setWidget(QR_WIDGET_KEY, undefined);
+	};
+
+	const clearWechatQueue = () => {
+		wechatQueue.length = 0;
+		drainingQueue = false;
+	};
+
+	const enqueueWechatTask = (msg: IncomingMessage, text: string) => {
+		wechatQueue.push({ msg, text, enqueuedAt: Date.now() });
+	};
+
+	const tryDrainWechatQueue = async (ctx: ExtensionContext) => {
+		if (drainingQueue || !ctx.isIdle()) return;
+		if (currentRunFromWechat || currentWechatRequest) return;
+
+		drainingQueue = true;
+		try {
+			// On submit failure, continue with the next item while still idle.
+			// On success, stop after one (matches single currentWechatRequest reply model).
+			while (wechatQueue.length > 0 && ctx.isIdle() && !currentRunFromWechat && !currentWechatRequest) {
+				const item = wechatQueue.shift()!;
+				try {
+					currentWechatRequest = item.msg;
+					currentRunFromWechat = true;
+					status(`微信指令：${compact(item.text, 50)}`);
+					pi.sendUserMessage(item.text);
+					return;
+				} catch (error) {
+					currentRunFromWechat = false;
+					currentWechatRequest = null;
+					pendingWechatAnswer = "";
+					try {
+						await bot?.reply(
+							item.msg,
+							`指令提交失败：${error instanceof Error ? error.message : String(error)}`,
+						);
+					} catch {
+						// Reply is best-effort.
+					}
+				}
+			}
+		} finally {
+			drainingQueue = false;
+		}
 	};
 
 	const sendToLastUser = async (text: string): Promise<boolean> => {
@@ -175,6 +244,7 @@ export default function wechatILink(pi: ExtensionAPI) {
 					"Pi 微信连接正常",
 					`工作目录：${activeCtx?.cwd ?? process.cwd()}`,
 					`状态：${activeCtx?.isIdle() === false ? "执行中" : "空闲"}`,
+					`待处理队列：${wechatQueue.length}`,
 					`待审批：${approvals.size}`,
 				].join("\n"),
 			);
@@ -192,16 +262,27 @@ export default function wechatILink(pi: ExtensionAPI) {
 			// Typing is best-effort.
 		}
 
+		// Busy path: keep tasks in extension-owned queue. Never use deliverAs followUp,
+		// otherwise Escape/abort restores them into the Pi editor.
+		// Also treat “WeChat reply slot already held” as busy: between agent_end and
+		// agent_settled (or drain flag set before agent starts) isIdle() can still be true.
+		const wechatSlotBusy =
+			currentRunFromWechat || currentWechatRequest !== null || drainingQueue;
+		if ((activeCtx && !activeCtx.isIdle()) || wechatSlotBusy) {
+			enqueueWechatTask(msg, text);
+			status(`微信已排队：${wechatQueue.length}`);
+			await bot?.reply(
+				msg,
+				`收到，已加入队列（第 ${wechatQueue.length} 条），当前任务完成后继续处理。\n发送“状态”可查看进度。`,
+			);
+			return;
+		}
+
 		currentWechatRequest = msg;
 		currentRunFromWechat = true;
 		status(`微信指令：${compact(text, 50)}`);
 		try {
-			if (activeCtx && !activeCtx.isIdle()) {
-				pi.sendUserMessage(text, { deliverAs: "followUp" });
-				await bot?.reply(msg, "收到，当前任务完成后继续处理这条指令。\n发送“状态”可查看进度。");
-			} else {
-				pi.sendUserMessage(text);
-			}
+			pi.sendUserMessage(text);
 		} catch (error) {
 			currentRunFromWechat = false;
 			currentWechatRequest = null;
@@ -223,6 +304,7 @@ export default function wechatILink(pi: ExtensionAPI) {
 
 		starting = true;
 		if (bot) bot.stop();
+		clearQrChrome(ctx);
 		bot = new WeChatBot({
 			storage: "file",
 			storageDir,
@@ -236,18 +318,46 @@ export default function wechatILink(pi: ExtensionAPI) {
 				force,
 				callbacks: {
 					onQrUrl: (url: string) => {
-						qrTerminal.generate(url, { small: true }, (qr: string) => {
-							process.stderr.write("\n  请使用手机微信扫描二维码：\n\n");
-							for (const line of qr.split("\n")) process.stderr.write(`  ${line}\n`);
-							process.stderr.write(`\n  若无法扫码，在微信中打开：${url}\n\n`);
-						});
+						if (!ctx.hasUI) {
+							// Headless / print mode: single-line URL only, no multi-line QR art.
+							process.stderr.write(`请在微信中打开扫码链接：${url}\n`);
+							return;
+						}
+						const qr = generateQrString(url);
+						const qrLines = qr.split("\n").filter((line) => line.length > 0);
+						ctx.ui.setWidget(QR_WIDGET_KEY, [
+							"请使用手机微信扫码",
+							...qrLines,
+							"",
+							`或打开: ${compact(url, 120)}`,
+						]);
 						status("请用微信扫码确认…");
 					},
-					onScanned: () => status("已扫码，请在微信确认…"),
-					onExpired: () => status("二维码过期，正在刷新…"),
+					onScanned: () => {
+						if (ctx.hasUI) status("已扫码，请在微信确认…");
+					},
+					onExpired: () => {
+						if (ctx.hasUI) {
+							status("二维码过期，正在刷新…");
+							ctx.ui.setWidget(QR_WIDGET_KEY, ["二维码已过期，正在刷新…"]);
+						}
+					},
+					onVerifyCode: async (isRetry: boolean) => {
+						if (!ctx.hasUI) {
+							// Fail closed: never fall back to SDK stdin readline under raw-mode TUI.
+							throw new Error("需要配对码，但当前模式无 UI");
+						}
+						const code = await ctx.ui.input(
+							isRetry ? "配对码错误，请重新输入微信显示的配对码" : "请输入微信显示的配对码",
+							"6 位配对码",
+						);
+						if (!code?.trim()) throw new Error("未输入配对码");
+						return code.trim();
+					},
 				},
 			});
 
+			clearQrChrome(ctx);
 			connected = true;
 			status(`微信 ✓ ${creds.accountId}`);
 			notify(`微信官方 iLink 已连接\nBot: ${creds.accountId}\n现在可从手机微信向机器人发指令`, "info");
@@ -269,6 +379,7 @@ export default function wechatILink(pi: ExtensionAPI) {
 				status(`微信轮询失败: ${error instanceof Error ? error.message : String(error)}`);
 			});
 		} catch (error) {
+			clearQrChrome(ctx);
 			bot = null;
 			connected = false;
 			status(undefined);
@@ -292,6 +403,8 @@ export default function wechatILink(pi: ExtensionAPI) {
 			}
 		}
 		approvals.clear();
+		clearWechatQueue();
+		clearQrChrome(activeCtx);
 		if (bot) bot.stop();
 		bot = null;
 		connected = false;
@@ -341,16 +454,18 @@ export default function wechatILink(pi: ExtensionAPI) {
 				pendingWechatAnswer = "";
 				lastProactiveNoticeAt = localRunStartedAt;
 			}
-			return;
+		} else {
+			status(`微信 ✓ ${bot.getCredentials()?.accountId ?? "connected"}`);
+			// A task started at the computer has no pending WeChat request. Proactively notify
+			// the last user, but suppress duplicates caused by retries/very short runs.
+			if (lastInbound && localRunStartedAt > lastProactiveNoticeAt) {
+				lastProactiveNoticeAt = Date.now();
+				await sendToLastUser(`✅ Pi 当前任务已完成，正在等待下一条指令。\n目录：${ctx.cwd}`);
+			}
 		}
 
-		status(`微信 ✓ ${bot.getCredentials()?.accountId ?? "connected"}`);
-		// A task started at the computer has no pending WeChat request. Proactively notify
-		// the last user, but suppress duplicates caused by retries/very short runs.
-		if (lastInbound && localRunStartedAt > lastProactiveNoticeAt) {
-			lastProactiveNoticeAt = Date.now();
-			await sendToLastUser(`✅ Pi 当前任务已完成，正在等待下一条指令。\n目录：${ctx.cwd}`);
-		}
+		// Drain after clearing current WeChat request flags so the next item owns the reply slot.
+		await tryDrainWechatQueue(ctx);
 	});
 
 	pi.on("tool_call", async (event, ctx) => {
@@ -437,6 +552,7 @@ export default function wechatILink(pi: ExtensionAPI) {
 					`连接：${connected ? "正常" : starting ? "连接中" : "未连接"}`,
 					`Bot：${credentials?.accountId ?? "-"}`,
 					`最近用户：${lastInbound?.userId ?? "尚未收到消息"}`,
+					`待处理队列：${wechatQueue.length}`,
 					`待审批：${approvals.size}`,
 					`状态目录：${storageDir}`,
 					`版本：${PACKAGE_VERSION}`,
@@ -448,6 +564,8 @@ export default function wechatILink(pi: ExtensionAPI) {
 	pi.registerCommand("wechat-stop", {
 		description: "断开微信 iLink",
 		handler: async (_args, ctx) => {
+			clearWechatQueue();
+			clearQrChrome(ctx);
 			if (bot) bot.stop();
 			bot = null;
 			connected = false;

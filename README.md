@@ -58,8 +58,8 @@ Then restart Pi or run `/reload`.
 First connect:
 
 1. Run `/wechat`
-2. Scan the terminal QR code with WeChat
-3. Confirm on your phone
+2. Scan the QR code shown in the Pi UI widget (or open the URL if headless)
+3. Confirm on your phone; if a pairing code is required, enter it in the Pi input dialog
 4. Message the bot from WeChat, e.g. `检查当前项目测试为什么失败`
 
 Credentials are stored under:
@@ -80,6 +80,8 @@ Later starts usually reconnect without scanning again.
 ```
 
 Any other text is injected into the current Pi session as a user prompt. When Pi fully settles, the final answer is sent back to WeChat.
+
+If Pi is already busy, the WeChat task is **queued inside the extension** (not Pi's follow-up queue). You get a “已加入队列” reply; after the current run settles, the next item is auto-submitted. Abort/Escape will **not** dump queued WeChat text into the Pi editor.
 
 ## Dangerous command approval
 
@@ -112,8 +114,9 @@ iLink API (Tencent)
     ▼
 pi-wechat-ilink extension
     │
-    ├── WeChat text → pi.sendUserMessage()
-    ├── agent_settled → reply final answer / completion notice
+    ├── idle  → pi.sendUserMessage(text)
+    ├── busy  → extension FIFO + “已排队” ack (no followUp)
+    ├── agent_settled → reply answer, then drain one queued task
     └── tool_call (dangerous bash) → WeChat approve/reject
 ```
 

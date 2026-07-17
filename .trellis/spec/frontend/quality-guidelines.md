@@ -1,51 +1,60 @@
-# Quality Guidelines
+# UI / 扩展面质量规范
 
-> Code quality standards for frontend development.
+> 聚焦 **不破坏 Pi TUI**、远程控制与本地编辑隔离。Hub 侧质量见 backend。
 
 ---
 
 ## Overview
 
-<!--
-Document your project's quality standards here.
+Bridge 与用户的界面契约：status 条、notify、斜杠命令、本机审批/输入回退。  
+远程消息 **绝不能** 进入 Pi 的 followUp/steer 恢复队列。
 
-Questions to answer:
-- What patterns are forbidden?
-- What linting rules do you enforce?
-- What are your testing requirements?
-- What code review standards apply?
--->
-
-(To be filled by the team)
+与 [../backend/quality-guidelines.md](../backend/quality-guidelines.md) 互补：backend 写全表，本文强调 UI 侧检查清单。
 
 ---
 
 ## Forbidden Patterns
 
-<!-- Patterns that should never be used and why -->
-
-(To be filled by the team)
+| Pattern | Why |
+|---------|-----|
+| 远程路径 `deliverAs: "followUp" \| "steer"` | abort 后文本进编辑器 |
+| TUI 下 `readline` / 抢 `stdin` | raw mode 冲突 |
+| 多行 `console.log`/`stderr` 当 UI | 弄脏 alternate-screen |
+| 无 `hasUI` 强调 `ctx.ui.*` | headless 失败 |
+| 启发式 need_reply（扫 `?`） | 误触远程等待 |
+| Hub 离线时静默丢审批 | 应回退本机 UI 或明确 notify |
 
 ---
 
 ## Required Patterns
 
-<!-- Patterns that must always be used -->
-
-(To be filled by the team)
-
----
-
-## Testing Requirements
-
-<!-- What level of testing is expected -->
-
-(To be filled by the team)
+| Pattern | Rule |
+|---------|------|
+| 用户提示 | 优先 `notify` / `setStatus` |
+| 远程任务 | 自有 FIFO + settled 后 drain |
+| 命令 | `/lark-status`、`/lark-ask` 行为稳定、文案中文 |
+| 超时 | 审批 reject；need_reply 取消并 notify |
+| 停机 | 清 queue、pending、status |
 
 ---
 
-## Code Review Checklist
+## 测试与手工验收
 
-<!-- What reviewers should check -->
+- 自动：`npm run typecheck`；Hub 单测不覆盖 TUI
+- 手工建议：
+  1. Hub 起 + bridge 连接，status 显示 piId
+  2. 忙时发远程消息 → 入队 notify → settled 后执行
+  3. Escape/abort 后编辑器 **无** 远程残留文本
+  4. `/lark-ask` → 飞书/控制回复绑定 requestId 才解除
+  5. 停 Hub → warning + 重连；危险命令可本机审批
 
-(To be filled by the team)
+---
+
+## Code Review Checklist（UI）
+
+- [ ] 无远程 followUp/steer
+- [ ] 无 TUI 下 stdin/多行 stderr UI
+- [ ] `hasUI` 守卫
+- [ ] settled 后 drain 顺序
+- [ ] shutdown 清队列
+- [ ] typecheck 通过

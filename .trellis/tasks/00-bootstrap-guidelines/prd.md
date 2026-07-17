@@ -21,9 +21,9 @@ the rest conversationally.
 
 ## Status (update the checkboxes as you complete each item)
 
-- [ ] Fill backend guidelines
-- [ ] Fill frontend guidelines
-- [ ] Add code examples
+- [x] Fill backend guidelines
+- [x] Fill frontend guidelines（无 Web SPA：改为 Pi 扩展 UI / TUI 约定）
+- [x] Add code examples（真实路径与模式引用：`src/hub/*`、`src/lark-bridge/index.ts`、`src/protocol.ts`）
 
 ---
 

@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 5
+- **Total Sessions**: 6
 - **Last Active**: 2026-07-17
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~172 | Active |
+| `journal-1.md` | ~205 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 6 | 2026-07-17 | 修复 Git 安装后 Hub 自动启动超时 | `92057a6` | `main` |
 | 5 | 2026-07-17 | Bridge 自动拉起本机 Hub | `b4d85ca` | `main` |
 | 4 | 2026-07-17 | Bootstrap Guidelines：补全 hub/bridge 开发规范 | `723a890` | `main` |
 | 3 | 2026-07-17 | 移除微信通道，产品化为 pi-lark-hub | `9212ab2` | `main` |

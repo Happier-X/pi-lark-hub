@@ -170,3 +170,36 @@ Busy-path WeChat tasks use extension-owned queue instead of Pi followUp; pairing
 ### Next Steps
 
 - None - task complete
+
+
+## Session 6: 修复 Git 安装后 Hub 自动启动超时
+
+**Date**: 2026-07-17
+**Task**: 修复 Git 安装后 Hub 自动启动超时
+**Branch**: `main`
+
+### Summary
+
+根因：tsx 仅在 devDependencies，Pi Git 安装无 dev 依赖导致 pi-lark-hub.mjs 立即退出；将 tsx 移入 dependencies，detached Hub 日志写入 ~/.pi/lark-hub/hub.log，超时文案附路径；omit=dev 隔离验证通过。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `92057a6` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

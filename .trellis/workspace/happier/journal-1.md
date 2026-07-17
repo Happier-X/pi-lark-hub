@@ -71,3 +71,36 @@ Busy-path WeChat tasks use extension-owned queue instead of Pi followUp; pairing
 ### Next Steps
 
 - None - task complete
+
+
+## Session 3: 移除微信通道，产品化为 pi-lark-hub
+
+**Date**: 2026-07-17
+**Task**: 移除微信通道，产品化为 pi-lark-hub
+**Branch**: `main`
+
+### Summary
+
+删除微信 iLink 运行时与依赖；默认扩展 re-export lark-bridge；包名改为 pi-lark-hub；文档与 spec 对齐飞书 multi-Pi。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `9212ab2` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

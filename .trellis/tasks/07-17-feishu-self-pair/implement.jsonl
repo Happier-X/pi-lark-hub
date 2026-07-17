@@ -1,0 +1,4 @@
+{"file": ".trellis/spec/backend/multi-pi-lark-hub.md", "reason": "Hub 合约与配置"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "权限与 fail-closed"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "TUI 与质量"}
+{"file": ".trellis/spec/backend/directory-structure.md", "reason": "新模块放置"}

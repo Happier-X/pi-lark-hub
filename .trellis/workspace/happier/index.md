@@ -8,7 +8,7 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 3
+- **Total Sessions**: 4
 - **Last Active**: 2026-07-17
 <!-- @@@/auto:current-status -->
 
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~106 | Active |
+| `journal-1.md` | ~139 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 4 | 2026-07-17 | Bootstrap Guidelines：补全 hub/bridge 开发规范 | `723a890` | `main` |
 | 3 | 2026-07-17 | 移除微信通道，产品化为 pi-lark-hub | `9212ab2` | `main` |
 | 2 | 2026-07-16 | Multi-Pi 飞书 Hub 与 Bridge（阶段 0–5） | `d281231` | `main` |
 | 1 | 2026-07-16 | Fix WeChat prompts leaking into Pi editor | `2588ebd` | `main` |

@@ -104,3 +104,36 @@ Busy-path WeChat tasks use extension-owned queue instead of Pi followUp; pairing
 ### Next Steps
 
 - None - task complete
+
+
+## Session 4: Bootstrap Guidelines：补全 hub/bridge 开发规范
+
+**Date**: 2026-07-17
+**Task**: Bootstrap Guidelines：补全 hub/bridge 开发规范
+**Branch**: `main`
+
+### Summary
+
+完成 00-bootstrap-guidelines：按代码库实况填充 .trellis/spec backend（目录/持久化/日志等）与 frontend（无 Web SPA，改为 Pi 扩展 TUI 约定），消除模板占位；prd checklist 勾选完成。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `723a890` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

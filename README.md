@@ -29,7 +29,37 @@ Pi B (lark-bridge) ──┼──► pi-lark-hub
 
 ## 安装
 
-### 本地开发
+通过 **GitHub / Git** 装到 Pi（不发布 npm）。装好后默认加载 lark-bridge（`package.json` → `pi.extensions`）。
+
+### 给别人用（推荐）
+
+```bash
+# HTTPS
+pi install https://github.com/Happier-X/pi-lark-hub
+
+# 等价写法
+pi install git:github.com/Happier-X/pi-lark-hub
+
+# 钉分支 / tag / commit（更稳）
+pi install https://github.com/Happier-X/pi-lark-hub@main
+
+# SSH（本机已配 GitHub key）
+pi install git:git@github.com:Happier-X/pi-lark-hub
+# 或
+pi install ssh://git@github.com/Happier-X/pi-lark-hub
+```
+
+然后重启 Pi 或 `/reload`。更新与卸载：
+
+```bash
+pi list
+pi update https://github.com/Happier-X/pi-lark-hub
+pi remove https://github.com/Happier-X/pi-lark-hub
+```
+
+私有仓库需对方有读权限（HTTPS 登录 / token，或 SSH）。
+
+### 本地开发（已 clone）
 
 ```bash
 pi install C:/code/pi-lark-hub
@@ -47,13 +77,7 @@ pi install .
 }
 ```
 
-### npm（发布后）
-
-```bash
-pi install npm:pi-lark-hub
-```
-
-### 快速加载（不 install）
+### 快速加载（不写入 packages）
 
 ```bash
 # 默认扩展入口 = lark-bridge（src/index.ts re-export）
@@ -68,17 +92,23 @@ pi -e ./src/lark-bridge/index.ts
 
 ### 1. 启动 Hub
 
+Hub 是**本机守护进程**，与 Pi 扩展分开运行。在仓库目录：
+
 ```bash
-npm install
+git clone https://github.com/Happier-X/pi-lark-hub.git
+cd pi-lark-hub
+npm install          # 装依赖（Node 库），不是 pi install
 npm run hub
-# 或全局 bin：pi-lark-hub
+# 或：npx pi-lark-hub / node scripts/pi-lark-hub.mjs
 ```
 
 Hub **仅监听 `127.0.0.1`**（默认端口 `8765`）。
 
+> `pi install https://github.com/...` 负责把 **Bridge 扩展** 挂进 Pi；**Hub 仍需** 在本机另开终端按上式启动。
+
 ### 2. 加载 Bridge
 
-安装本包后，默认 `pi.extensions` 会加载 lark-bridge。也可：
+用上面的 `pi install`（GitHub 或本地路径）后，默认 `pi.extensions` 会加载 lark-bridge。也可临时：
 
 ```bash
 pi -e ./src/index.ts

@@ -137,3 +137,36 @@ Busy-path WeChat tasks use extension-owned queue instead of Pi followUp; pairing
 ### Next Steps
 
 - None - task complete
+
+
+## Session 5: Bridge 自动拉起本机 Hub
+
+**Date**: 2026-07-17
+**Task**: Bridge 自动拉起本机 Hub
+**Branch**: `main`
+
+### Summary
+
+实现 lark-bridge 在本机 Hub 不可达时自动拉起 pi-lark-hub：loopback health 探测、detached spawn、30s 冷却、崩溃自愈、关闭开关 PI_LARK_HUB_AUTOSTART；补充单测、README 与 Trellis spec。
+
+### Main Changes
+
+- Detailed change bullets were not supplied; see the summary above.
+
+### Git Commits
+
+| Hash | Message |
+|------|---------|
+| `b4d85ca` | (see git log) |
+
+### Testing
+
+- Validation was not recorded for this session.
+
+### Status
+
+[OK] **Completed**
+
+### Next Steps
+
+- None - task complete

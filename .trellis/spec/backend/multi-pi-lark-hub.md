@@ -35,7 +35,7 @@
 
 | 方法 | 路径 | 用途 |
 |------|------|------|
-| GET | `/health` | 健康与在线摘要 |
+| GET | `/health` | 健康与在线摘要；含 `feishuMode` / `ownerBound` / `needsPairing`（配对引导用） |
 | GET | `/instances` | 在线实例列表 |
 | GET | `/notifications` | 最近出站（调试） |
 | GET | `/approvals` | 审批状态（调试） |
@@ -92,7 +92,7 @@
 
 | 步骤 | 行为 |
 |------|------|
-| 发起 | 仅 Pi 命令 `/lark-pair` → WS `pair_begin` |
+| 发起 | Pi 命令 `/lark-pair`，或 **lark-cli 未绑定** 时 bridge 在 `register_ok` 后自动 `pair_begin`（每进程最多一次） |
 | 出码 | Hub `PairingStore`：6 位（去易混字符），TTL 5min，单活跃会话，用后即废 |
 | 展示 | Hub→Pi `pair_challenge`；bridge notify 中文口令模板 |
 | 入站口令 | 文本 `配对 <码>` 或 `pair <码>`（`parsePairCommand`） |

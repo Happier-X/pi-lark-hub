@@ -16,7 +16,7 @@ export type ApprovalDecision = "approve" | "reject";
 export type Capability = "approval" | "prompt" | "settled";
 
 /** Hub 对 Bridge 暴露的协议能力；新增不破坏旧客户端 */
-export const HUB_FEATURES = ["pair_begin"] as const;
+export const HUB_FEATURES = ["pair_begin", "setup_begin"] as const;
 export type HubFeature = (typeof HUB_FEATURES)[number];
 
 /** Pi → Hub：注册（piId 可省略，由 Hub 生成） */
@@ -60,6 +60,7 @@ export type PairBeginMessage = {
 	type: "pair_begin";
 	piId: string;
 };
+export type SetupBeginMessage = { type: "setup_begin"; piId: string; force?: boolean };
 
 /** Hub → Pi：注册成功 */
 export type RegisterOkMessage = {
@@ -107,6 +108,9 @@ export type PairChallengeMessage = {
 };
 
 /** Hub → Pi：配对结果（成功/失败摘要） */
+export type SetupChallengeMessage = { type: "setup_challenge"; url: string; expiresAt: number; ttlMs: number };
+export type SetupResultMessage = { type: "setup_result"; ok: boolean; appId?: string; ownerBound: boolean; needPair: boolean; message: string };
+
 export type PairResultMessage = {
 	type: "pair_result";
 	ok: boolean;
@@ -119,7 +123,8 @@ export type PiToHubMessage =
 	| HeartbeatMessage
 	| NotifyMessage
 	| UnregisterMessage
-	| PairBeginMessage;
+	| PairBeginMessage
+	| SetupBeginMessage;
 
 export type HubToPiMessage =
 	| RegisterOkMessage
@@ -128,7 +133,9 @@ export type HubToPiMessage =
 	| ApprovalResultMessage
 	| ErrorMessage
 	| PairChallengeMessage
-	| PairResultMessage;
+	| PairResultMessage
+	| SetupChallengeMessage
+	| SetupResultMessage;
 
 export type ProtocolMessage = PiToHubMessage | HubToPiMessage;
 
@@ -181,6 +188,7 @@ export function isPiToHubMessage(msg: ProtocolMessage): msg is PiToHubMessage {
 		msg.type === "heartbeat" ||
 		msg.type === "notify" ||
 		msg.type === "unregister" ||
-		msg.type === "pair_begin"
+		msg.type === "pair_begin" ||
+		msg.type === "setup_begin"
 	);
 }

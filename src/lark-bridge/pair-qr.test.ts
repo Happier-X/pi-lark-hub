@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
 	defaultPairQrPath,
+	defaultSetupQrPath,
 	openPathBestEffort,
 	pairQrPayload,
 	writePairQrPng,
+	writeSetupQrPng,
 } from "./pair-qr.js";
 
 describe("pairQrPayload", () => {
@@ -17,6 +19,16 @@ describe("defaultPairQrPath", () => {
 	it("落在 .pi/lark-hub", () => {
 		const p = defaultPairQrPath("/home/u");
 		assert.match(p.replace(/\\/g, "/"), /\/.pi\/lark-hub\/pair-qr\.png$/);
+	});
+});
+
+describe("setup QR", () => {
+	it("使用独立 setup-qr.png 且载荷保持官方 URL", async () => {
+		assert.match(defaultSetupQrPath("/home/u").replace(/\\/g, "/"), /setup-qr\.png$/);
+		let payload = "";
+		const r = await writeSetupQrPng("https://accounts.feishu.cn/verify", { outPath: "/tmp/setup.png", toFile: async (_path, text) => { payload = text; } });
+		assert.equal(r.ok, true);
+		assert.equal(payload, "https://accounts.feishu.cn/verify");
 	});
 });
 

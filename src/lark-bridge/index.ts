@@ -36,7 +36,7 @@ import {
 	shouldAutoPair,
 	type EnsureHubResult,
 } from "./hub-autostart.js";
-import { openPathBestEffort, writePairQrPng } from "./pair-qr.js";
+import { openPathBestEffort, writePairQrPng, writeSetupQrPng } from "./pair-qr.js";
 
 const STATUS_KEY = "lark-bridge";
 const DEFAULT_HUB_URL = process.env.PI_LARK_HUB_URL ?? "ws://127.0.0.1:8765";
@@ -418,6 +418,16 @@ export default function larkBridge(pi: ExtensionAPI) {
 				})();
 				return;
 			}
+			case "setup_challenge": {
+				status("等待飞书扫码…");
+				void (async () => { const qr = await writeSetupQrPng(msg.url); const lines = ["请用飞书扫描官方授权二维码：", msg.url]; if (qr.ok) { lines.push(`二维码：${qr.path}`); openPathBestEffort(qr.path); } else lines.push(`二维码生成失败：${qr.error}`); notify(lines.join("\n"), "info"); })();
+				return;
+			}
+			case "setup_result": {
+				notify(`${msg.ok ? "飞书开局成功" : "飞书开局失败"}：${msg.message}${msg.needPair ? "\n请继续执行 /lark-pair。" : ""}`, msg.ok ? "info" : "warning");
+				if (msg.ok) status(connected && piId ? `飞书 Hub ✓ ${piId}` : undefined);
+				return;
+			}
 			case "pair_result": {
 				notify(
 					msg.ok
@@ -755,6 +765,18 @@ export default function larkBridge(pi: ExtensionAPI) {
 			block: true,
 			reason,
 		};
+	});
+
+	pi.registerCommand("lark-setup", {
+		description: "扫描飞书官方授权二维码，启用原生 OpenAPI + WebSocket",
+		handler: async (args, ctx) => {
+			activeCtx = ctx;
+			if (!connected || !piId) { notify("尚未连接 Hub，请稍后重试 /lark-setup", "warning"); await connectHubWithEnsure(ctx); return; }
+			const arg = (args ?? "").trim().toLowerCase();
+			if (arg && arg !== "force") { notify("用法：/lark-setup [force]", "warning"); return; }
+			if (!send({ type: "setup_begin", piId, force: arg === "force" })) { notify("发送 setup_begin 失败", "error"); return; }
+			status("正在请求飞书授权二维码…");
+		},
 	});
 
 	pi.registerCommand("lark-pair", {

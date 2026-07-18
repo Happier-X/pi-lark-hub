@@ -15,6 +15,8 @@ import {
 	type HubConfig,
 } from "./config.js";
 import { startFeishuInbound } from "./feishu-inbound.js";
+import { loadCredentials } from "./credentials.js";
+import { NativeFeishuTransport, NativeFeishuWsInbound } from "./feishu-native.js";
 import { LarkCliFeishuTransport } from "./feishu-lark-cli.js";
 import { ConsoleFeishuTransport } from "./feishu-transport.js";
 import { DEFAULT_HUB_HOST, DEFAULT_HUB_PORT, startHubServer } from "./server.js";
@@ -36,7 +38,8 @@ function printHelp(): void {
   环境变量:
     PI_LARK_HUB_PORT
     PI_LARK_ALLOWED_OPEN_IDS          逗号分隔 open_id
-    PI_LARK_FEISHU_MODE               console | lark-cli（默认 console）
+    PI_LARK_FEISHU_MODE               console | lark-cli | native（默认 console）
+    PI_LARK_HUB_CREDENTIALS           独立密钥文件路径
     PI_LARK_FEISHU_USER_ID            ou_xxx
     PI_LARK_FEISHU_CHAT_ID            oc_xxx
     PI_LARK_REQUIRE_ALLOWLIST         true|false
@@ -80,6 +83,11 @@ function parseArgs(argv: string[]): { port?: number; host?: string; help?: boole
 }
 
 function createFeishuTransport(config: HubConfig) {
+	if (config.feishu.mode === "native") {
+		const credentials = loadCredentials();
+		if (!credentials) throw new Error("feishu.mode=native 但 credentials.json 不存在或无效");
+		return new NativeFeishuTransport(credentials, { userId: config.feishu.userId, chatId: config.feishu.chatId });
+	}
 	if (config.feishu.mode === "lark-cli") {
 		return new LarkCliFeishuTransport({
 			as: config.feishu.as,
@@ -153,7 +161,23 @@ async function main(): Promise<void> {
 		allowedOpenIds: config.allowedOpenIds,
 		hubConfig: config,
 		consoleAllowEmptyAllowlist: config.feishu.mode === "console",
-		onReady: (server) => {
+		onNativeRuntime: async (transport, credentials, server) => {
+			const previousStop = inboundStop;
+			const candidate = new NativeFeishuWsInbound(credentials, { onMessage: async (input) => { const r = await server.handleInboundMessage(input); return { ok: r.ok, reply: r.reply }; }, replyToUser: async (text) => { await transport.send({ title: "Hub", body: text }); } }, { log: console.log });
+			try { await candidate.start(); } catch (error) { candidate.stop(); throw error; }
+			const stop = () => { candidate.stop(); if (inboundStop === stop) inboundStop = previousStop; };
+			inboundStop = stop;
+			// 提交旧 runtime 的停止由 Hub 在凭证/config 成功落盘后执行；
+			// 这样落盘或切换失败时，旧 inbound 仍可继续接收消息。
+			return stop;
+		},
+		onReady: async (server) => {
+			if (config.feishu.mode === "native") {
+				const credentials = loadCredentials(); if (!credentials) return;
+				const consumer = new NativeFeishuWsInbound(credentials, { onMessage: async (input) => { const r = await server.handleInboundMessage(input); return { ok: r.ok, reply: r.reply }; }, replyToUser: async (text) => { await server.feishu.send({ title: "Hub", body: text }); } }, { log: console.log });
+				try { await consumer.start(); } catch (error) { consumer.stop(); throw new Error(`原生 WS 启动失败，当前仅 HTTP 控制面可用：${error instanceof Error ? error.message : String(error)}`); }
+				inboundStop = () => consumer.stop(); return;
+			}
 			if (config.feishu.mode !== "lark-cli") return;
 
 			// 可选入站：失败仅告警
@@ -212,10 +236,10 @@ async function main(): Promise<void> {
 	console.log(`[pi-lark-hub] 健康检查: curl http://${hub.host}:${hub.port}/health`);
 	if (config.feishu.mode === "console") {
 		console.log(`[pi-lark-hub] 模拟飞书: POST /control/message`);
+	} else if (config.feishu.mode === "lark-cli") {
+		console.log(`[pi-lark-hub] 飞书出站: lark-cli；入站: event consume（失败则仅 HTTP）`);
 	} else {
-		console.log(
-			`[pi-lark-hub] 飞书出站: lark-cli；入站: event consume（失败则仅 HTTP）`,
-		);
+		console.log(`[pi-lark-hub] 飞书出站: 原生 OpenAPI；入站: 官方 WebSocket`);
 	}
 
 	const shutdown = async (signal: string) => {

@@ -6,9 +6,10 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { replaceFileAtomic } from "./atomic-file.js";
 import { DEFAULT_HUB_HOST, DEFAULT_HUB_PORT } from "./server.js";
 
-export type FeishuMode = "console" | "lark-cli";
+export type FeishuMode = "console" | "lark-cli" | "native";
 export type FeishuAs = "bot" | "user";
 
 export type HubConfig = {
@@ -87,8 +88,8 @@ function parseOpenIdList(raw: string | undefined): string[] | undefined {
 function parseMode(raw: string | undefined): FeishuMode | undefined {
 	if (raw === undefined || raw === "") return undefined;
 	const v = raw.trim().toLowerCase();
-	if (v === "console" || v === "lark-cli") return v;
-	throw new Error(`无效 feishu.mode: ${raw}（允许 console | lark-cli）`);
+	if (v === "console" || v === "lark-cli" || v === "native") return v;
+	throw new Error(`无效 feishu.mode: ${raw}（允许 console | lark-cli | native）`);
 }
 
 function parseAs(raw: string | undefined): FeishuAs | undefined {
@@ -244,14 +245,14 @@ export function validateHubConfig(config: HubConfig): ConfigValidationError[] {
 		});
 	}
 
-	if (config.feishu.mode !== "console" && config.feishu.mode !== "lark-cli") {
+	if (config.feishu.mode !== "console" && config.feishu.mode !== "lark-cli" && config.feishu.mode !== "native") {
 		errors.push({
 			code: "invalid_mode",
 			message: `无效 feishu.mode: ${config.feishu.mode}`,
 		});
 	}
 
-	if (config.feishu.mode === "lark-cli") {
+	if (config.feishu.mode === "lark-cli" || config.feishu.mode === "native") {
 		const hasUser = Boolean(config.feishu.userId?.trim());
 		const hasChat = Boolean(config.feishu.chatId?.trim());
 		const bootstrapping = config.allowedOpenIds.length === 0;
@@ -260,7 +261,7 @@ export function validateHubConfig(config: HubConfig): ConfigValidationError[] {
 			errors.push({
 				code: "missing_recipient",
 				message:
-					"feishu.mode=lark-cli 且已配置白名单时必须设置 feishu.userId（ou_xxx）或 feishu.chatId（oc_xxx）；或清空白名单后用 /lark-pair 绑定",
+					`feishu.mode=${config.feishu.mode} 且已配置白名单时必须设置 feishu.userId（ou_xxx）或 feishu.chatId（oc_xxx）；或清空白名单后用 /lark-pair 绑定`,
 			});
 		}
 		if (hasUser && hasChat) {
@@ -337,7 +338,7 @@ export function saveHubOwnerBinding(input: {
 	delete nextFile.feishu!.chatId;
 
 	mkdirSync(path.dirname(configPath), { recursive: true });
-	writeFileSync(configPath, `${JSON.stringify(nextFile, null, 2)}\n`, "utf8");
+	writeConfigFileAtomic(configPath, nextFile);
 
 	const config = loadHubConfig({
 		configPath,
@@ -345,6 +346,42 @@ export function saveHubOwnerBinding(input: {
 		env: {}, // 落盘结果以文件为准，避免测试 env 干扰
 	});
 	return { configPath, config };
+}
+
+/** setup 成功后原子写 native mode；有真人 owner 则单主人绑定，否则清空旧主人进入 bootstrap。 */
+export function saveNativeSetupConfig(input: {
+	configPath?: string;
+	base?: HubConfig;
+	ownerOpenId?: string;
+}): { configPath: string; config: HubConfig } {
+	const configPath = input.configPath?.trim() || input.base?.configPath?.trim() || defaultConfigPath();
+	let existing: HubConfigFile = {};
+	if (existsSync(configPath)) {
+		try { existing = JSON.parse(readFileSync(configPath, "utf8")) as HubConfigFile; } catch { existing = {}; }
+	}
+	const owner = input.ownerOpenId?.trim();
+	const nextFile: HubConfigFile = {
+		...existing,
+		allowedOpenIds: owner ? [owner] : [],
+		requireAllowlist: owner ? true : false,
+		feishu: {
+			...(existing.feishu ?? {}),
+			mode: "native",
+			as: (existing.feishu?.as ?? input.base?.feishu.as ?? "bot"),
+		},
+	};
+	if (owner) nextFile.feishu!.userId = owner;
+	else delete nextFile.feishu!.userId;
+	delete nextFile.feishu!.chatId;
+	writeConfigFileAtomic(configPath, nextFile);
+	return { configPath, config: loadHubConfig({ configPath, skipFile: false, env: {} }) };
+}
+
+function writeConfigFileAtomic(configPath: string, value: HubConfigFile): void {
+	mkdirSync(path.dirname(configPath), { recursive: true });
+	const tmp = `${configPath}.${process.pid}.${Date.now()}.tmp`;
+	writeFileSync(tmp, `${JSON.stringify(value, null, 2)}\n`, "utf8");
+	replaceFileAtomic(tmp, configPath);
 }
 
 export function assertValidHubConfig(config: HubConfig): void {

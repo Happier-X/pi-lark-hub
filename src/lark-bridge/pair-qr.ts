@@ -12,6 +12,10 @@ export function defaultPairQrPath(home = os.homedir()): string {
 	return path.join(home, ".pi", "lark-hub", "pair-qr.png");
 }
 
+export function defaultSetupQrPath(home = os.homedir()): string {
+	return path.join(home, ".pi", "lark-hub", "setup-qr.png");
+}
+
 /** 二维码文本载荷：与飞书口令一致 */
 export function pairQrPayload(code: string): string {
 	return `配对 ${code.trim().toUpperCase()}`;
@@ -31,11 +35,10 @@ export type WritePairQrOptions = {
 	) => Promise<void>;
 };
 
-export async function writePairQrPng(
-	code: string,
+export async function writeQrPng(
+	payload: string,
 	options: WritePairQrOptions = {},
 ): Promise<WritePairQrResult> {
-	const payload = pairQrPayload(code);
 	const outPath = options.outPath ?? defaultPairQrPath();
 	const toFile =
 		options.toFile ??
@@ -54,6 +57,14 @@ export async function writePairQrPng(
 		const message = error instanceof Error ? error.message : String(error);
 		return { ok: false, error: message, path: outPath, payload };
 	}
+}
+
+export async function writePairQrPng(code: string, options: WritePairQrOptions = {}): Promise<WritePairQrResult> {
+ return writeQrPng(pairQrPayload(code), options);
+}
+
+export async function writeSetupQrPng(url: string, options: WritePairQrOptions = {}): Promise<WritePairQrResult> {
+ return writeQrPng(url, { ...options, outPath: options.outPath ?? defaultSetupQrPath() });
 }
 
 export type OpenPathOptions = {

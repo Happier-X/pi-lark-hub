@@ -1,0 +1,5 @@
+{"path":".trellis/spec/backend/multi-pi-lark-hub.md","title":"Hub/autostart 合约"}
+{"path":".trellis/spec/backend/error-handling.md","title":"错误安全"}
+{"path":"src/lark-bridge/hub-autostart.ts","title":"ensure 实现"}
+{"path":"src/lark-bridge/hub-autostart.test.ts","title":"测试"}
+{"path":"src/hub/server.ts","title":"health"}

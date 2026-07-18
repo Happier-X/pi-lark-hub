@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/multi-pi-lark-hub.md", "reason": "对照 mode/配对/安全路由是否与实现一致"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "对照失败回滚与密钥不进日志"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "typecheck/测试与复用约定"}
+{"file": ".trellis/tasks/07-18-feishu-qr-deep-pair/prd.md", "reason": "验收标准逐条核对"}
+{"file": ".trellis/tasks/07-18-feishu-qr-deep-pair/design.md", "reason": "协议与落盘顺序是否实现"}

@@ -1,0 +1,5 @@
+{"file": ".trellis/spec/backend/multi-pi-lark-hub.md", "reason": "飞书 mode/配对/出站入站主合约；native 模式与 credentials 须落在此"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "热切换失败回滚、凭证/密钥日志禁令、setup 错误矩阵"}
+{"file": ".trellis/tasks/07-18-feishu-qr-deep-pair/prd.md", "reason": "需求 R1–R13 与验收"}
+{"file": ".trellis/tasks/07-18-feishu-qr-deep-pair/design.md", "reason": "registration 协议、落盘顺序、Native transport/WS 边界"}
+{"file": ".trellis/tasks/07-18-feishu-qr-deep-pair/implement.md", "reason": "有序实现清单与验证命令"}

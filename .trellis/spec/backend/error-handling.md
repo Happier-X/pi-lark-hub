@@ -29,6 +29,7 @@ No custom error classes. Use `Error` with clear Chinese or bilingual messages fo
 | `sendUserMessage` throws (idle or drain) | Clear current remote flags; notify / hub error as appropriate. On drain, continue next queue item if still idle. |
 | Hub notify / outbound Feishu fails | Bridge status / notify error; do not crash Pi; hub may mark `failed_delivery` for approval retry with same decision. |
 | Hub process down | Bridge reconnect +（默认）冷却后自动再拉起本机 Hub；审批 / need_reply 可回退本机 UI；do not crash. |
+| Loopback Hub 能力过期 | 仅按 `/health.pid` 发 SIGTERM；无合法 pid 或退出超时则提示手动重启，禁止扫端口或继续抢占 spawn。 |
 | Unauthorized openId | Hub `ok: false`, no delivery；可提示 `/lark-pair`。 |
 | 配对失败（无会话/错码/过期/无 openId） | 中文回执；不改配置。 |
 | 配对落盘失败 | 回执失败；不静默半成功。 |

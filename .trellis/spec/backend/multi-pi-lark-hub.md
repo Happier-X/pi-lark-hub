@@ -70,6 +70,7 @@
 | `PI_LARK_HUB_PORT` | 端口，默认 8765 |
 | `PI_LARK_HUB_URL` | Bridge 连接 WS URL |
 | `PI_LARK_HUB_AUTOSTART` | Bridge 是否自动拉起本机 Hub；默认开；`0`/`false`/`no`/`off` 关闭 |
+| `PI_LARK_HUB_AUTORESTART` | health 能力过期时是否自动重启 loopback Hub；默认开；falsy 关闭 |
 | `PI_LARK_ALLOWED_OPEN_IDS` | 逗号分隔 open_id 白名单 |
 | `PI_LARK_FEISHU_MODE` | `console` \| `lark-cli` |
 | `PI_LARK_FEISHU_USER_ID` | 出站 DM 目标 `ou_xxx` |
@@ -87,6 +88,7 @@
 | 生命周期 | Pi/`session_shutdown` **不**杀 Hub（常驻） |
 | 关闭 | `PI_LARK_HUB_AUTOSTART=0` |
 | 失败诊断 | 超时/启动失败 notify 必须附 `hub.log` 路径 |
+| 更新自愈 | `/health` 暴露 `pid` / `packageVersion` / `features`；缺 bridge 最低能力（当前 `pair_begin`）= stale；仅 loopback 且有合法 health.pid 时 SIGTERM 后拉起当前包，禁止扫端口盲杀 |
 
 ### 本人短码配对（必须）
 

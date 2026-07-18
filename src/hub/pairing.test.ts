@@ -3,8 +3,27 @@ import { describe, it } from "node:test";
 import {
 	PairingStore,
 	parsePairCommand,
+	computePairingHealth,
 	DEFAULT_PAIR_TTL_MS,
 } from "./pairing.js";
+
+describe("computePairingHealth", () => {
+	it("仅 lark-cli 且空名单 needsPairing", () => {
+		assert.deepEqual(computePairingHealth({ feishuMode: "lark-cli", allowlistSize: 0 }), {
+			feishuMode: "lark-cli",
+			ownerBound: false,
+			needsPairing: true,
+		});
+		assert.equal(
+			computePairingHealth({ feishuMode: "lark-cli", allowlistSize: 1 }).needsPairing,
+			false,
+		);
+		assert.equal(
+			computePairingHealth({ feishuMode: "console", allowlistSize: 0 }).needsPairing,
+			false,
+		);
+	});
+});
 
 describe("parsePairCommand", () => {
 	it("识别中英口令", () => {

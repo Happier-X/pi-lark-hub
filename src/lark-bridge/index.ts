@@ -30,7 +30,10 @@ import {
 } from "../protocol.js";
 import {
 	ensureHubRunning,
+	fetchHubPairingStatus,
+	hubUrlToHttpOrigin,
 	isAutostartEnabled,
+	shouldAutoPair,
 	type EnsureHubResult,
 } from "./hub-autostart.js";
 
@@ -130,6 +133,10 @@ export default function larkBridge(pi: ExtensionAPI) {
 	let connected = false;
 	let hubDownNotified = false;
 	let autostartFailureNotified = false;
+	/** 本进程是否已自动发起过配对（重连不再刷） */
+	let autoPairAttempted = false;
+	/** 下一次 pair_challenge 是否来自自动引导（仅文案） */
+	let autoPairPending = false;
 	let lastEnsureResult: EnsureHubResult | null = null;
 	let intentionalClose = false;
 	let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
@@ -152,6 +159,34 @@ export default function larkBridge(pi: ExtensionAPI) {
 
 	const notify = (text: string, level: "info" | "warning" | "error" = "info") => {
 		if (activeCtx?.hasUI) activeCtx.ui.notify(text, level);
+	};
+
+	/** register_ok 后：lark-cli 未绑定则本进程自动 pair_begin 一次 */
+	const maybeAutoPairAfterRegister = async () => {
+		if (!connected || !piId) return;
+		if (autoPairAttempted) return;
+
+		const origin = hubUrlToHttpOrigin(DEFAULT_HUB_URL);
+		if (!origin) return;
+
+		const st = await fetchHubPairingStatus(origin);
+		if (!st) return;
+
+		if (!shouldAutoPair({ needsPairing: st.needsPairing, autoPairAttempted })) {
+			return;
+		}
+
+		// 先占坑，避免 health 慢/并发 register 双发
+		autoPairAttempted = true;
+		autoPairPending = true;
+		const ok = send({ type: "pair_begin", piId });
+		if (!ok) {
+			autoPairPending = false;
+			// 允许后续重试一次（连接瞬时不可用）
+			autoPairAttempted = false;
+			return;
+		}
+		status("等待配对码…");
 	};
 
 	const clearTimers = () => {
@@ -322,6 +357,7 @@ export default function larkBridge(pi: ExtensionAPI) {
 				status(`飞书 Hub ✓ ${piId}`);
 				notify(`已注册到 pi-lark-hub\npiId: ${piId}`, "info");
 				startHeartbeat();
+				void maybeAutoPairAfterRegister();
 				return;
 			}
 			case "notify_ack": {
@@ -353,13 +389,16 @@ export default function larkBridge(pi: ExtensionAPI) {
 			case "pair_challenge": {
 				const mins = Math.max(1, Math.round(msg.ttlMs / 60_000));
 				const lines = [
-					"飞书本人配对",
+					autoPairPending
+						? "首次使用：请完成飞书本人配对"
+						: "飞书本人配对",
 					`配对码：${msg.code}`,
 					`有效期：约 ${mins} 分钟`,
 					"请在飞书给机器人发送：",
 					`配对 ${msg.code}`,
 					"（也可用 curl POST /control/message 模拟，body 含 openId）",
 				];
+				autoPairPending = false;
 				status(`配对码 ${msg.code}`);
 				notify(lines.join("\n"), "info");
 				return;

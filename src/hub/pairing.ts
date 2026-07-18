@@ -4,6 +4,29 @@
 
 export const DEFAULT_PAIR_TTL_MS = 5 * 60 * 1000;
 
+export type PairingHealthFields = {
+	feishuMode: "console" | "lark-cli";
+	/** 是否已有白名单主人 */
+	ownerBound: boolean;
+	/** lark-cli 且未绑定 → 应引导配对 */
+	needsPairing: boolean;
+};
+
+/** Hub /health 与自动引导共用：仅 lark-cli 且白名单为空需要配对 */
+export function computePairingHealth(input: {
+	feishuMode?: string;
+	allowlistSize: number;
+}): PairingHealthFields {
+	const mode =
+		input.feishuMode === "lark-cli" ? "lark-cli" : "console";
+	const ownerBound = input.allowlistSize > 0;
+	return {
+		feishuMode: mode,
+		ownerBound,
+		needsPairing: mode === "lark-cli" && !ownerBound,
+	};
+}
+
 /** 去掉易混字符 0OIl1 */
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 const DEFAULT_CODE_LEN = 6;
@@ -33,9 +56,7 @@ export type PairingStoreOptions = {
 	random?: () => number;
 };
 
-export function parsePairCommand(
-	text: string,
-): { code: string } | null {
+export function parsePairCommand(text: string): { code: string } | null {
 	const t = (text ?? "").trim();
 	const m = t.match(/^(配对|pair)\s+([A-Za-z0-9]{4,12})$/i);
 	if (!m) return null;

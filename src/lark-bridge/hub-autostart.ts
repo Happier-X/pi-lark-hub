@@ -163,6 +163,69 @@ export function resolveHubSpawnSpec(
 	};
 }
 
+/** 是否应自动发起 pair_begin（每进程最多一次） */
+export function shouldAutoPair(input: {
+	needsPairing: boolean;
+	autoPairAttempted: boolean;
+}): boolean {
+	return input.needsPairing && !input.autoPairAttempted;
+}
+
+export type HubPairingStatus = {
+	ok: boolean;
+	feishuMode?: string;
+	ownerBound?: boolean;
+	needsPairing: boolean;
+};
+
+/** GET /health 解析配对相关字段；失败返回 null */
+export function fetchHubPairingStatus(
+	httpOrigin: string,
+	timeoutMs: number = DEFAULT_PROBE_TIMEOUT_MS,
+): Promise<HubPairingStatus | null> {
+	return new Promise((resolve) => {
+		const url = `${httpOrigin.replace(/\/$/, "")}/health`;
+		const req = http.get(url, { timeout: timeoutMs }, (res) => {
+			const chunks: Buffer[] = [];
+			res.on("data", (c) => chunks.push(c));
+			res.on("end", () => {
+				if (res.statusCode !== 200) {
+					resolve(null);
+					return;
+				}
+				try {
+					const body = Buffer.concat(chunks).toString("utf8");
+					const json = JSON.parse(body) as {
+						ok?: unknown;
+						feishuMode?: unknown;
+						ownerBound?: unknown;
+						needsPairing?: unknown;
+					};
+					if (json.ok !== true) {
+						resolve(null);
+						return;
+					}
+					resolve({
+						ok: true,
+						feishuMode:
+							typeof json.feishuMode === "string" ? json.feishuMode : undefined,
+						ownerBound:
+							typeof json.ownerBound === "boolean" ? json.ownerBound : undefined,
+						needsPairing: json.needsPairing === true,
+					});
+				} catch {
+					resolve(null);
+				}
+			});
+		});
+		req.on("timeout", () => {
+			req.destroy();
+			resolve(null);
+		});
+		req.on("error", () => resolve(null));
+	});
+}
+
 export function probeHubHealth(
 	httpOrigin: string,
 	timeoutMs: number = DEFAULT_PROBE_TIMEOUT_MS,

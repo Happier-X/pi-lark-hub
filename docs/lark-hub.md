@@ -96,7 +96,8 @@ Hub **仅监听 127.0.0.1**。
 
 | 步骤 | 动作 |
 |------|------|
-| 1 | Pi：`/lark-pair` → 展示 6 位码（5 分钟、用后即废） |
+| 0 | **自动引导**：`lark-cli` 且白名单空时，Pi `register_ok` 后自动 `pair_begin`（每进程一次）；`GET /health` 含 `needsPairing` |
+| 1 | 或手动 Pi：`/lark-pair` → 展示 6 位码（5 分钟、用后即废） |
 | 2 | 飞书本人给机器人发：`配对 XXXXXX`（或 `pair XXXXXX`） |
 | 3 | Hub 写入 `allowedOpenIds=[open_id]`、`feishu.userId=open_id`，删除 `chatId` |
 | 模拟 | `POST /control/message` body：`{ "text": "配对 XXXXXX", "openId": "ou_…" }` |

@@ -14,6 +14,7 @@ import {
 	resetAutostartCooldownState,
 	resolveHubSpawnSpec,
 	resolvePackageRoot,
+	shouldAutoPair,
 } from "./hub-autostart.js";
 
 const okSpawn = (logPath = "/tmp/hub-test.log") =>
@@ -36,6 +37,25 @@ describe("isAutostartEnabled", () => {
 			assert.equal(isAutostartEnabled({ PI_LARK_HUB_AUTOSTART: v }), true, v);
 		}
 	});
+});
+
+describe("shouldAutoPair", () => {
+	it("仅 needsPairing 且未尝试过",
+		() => {
+			assert.equal(
+				shouldAutoPair({ needsPairing: true, autoPairAttempted: false }),
+				true,
+			);
+			assert.equal(
+				shouldAutoPair({ needsPairing: true, autoPairAttempted: true }),
+				false,
+			);
+			assert.equal(
+				shouldAutoPair({ needsPairing: false, autoPairAttempted: false }),
+				false,
+			);
+		},
+	);
 });
 
 describe("hubUrlToHttpOrigin", () => {

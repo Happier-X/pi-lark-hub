@@ -23,7 +23,7 @@ import { handleControlApproval, handleControlMessage } from "./control.js";
 import type { FeishuTransport } from "./feishu-transport.js";
 import { ConsoleFeishuTransport } from "./feishu-transport.js";
 import { LarkCliFeishuTransport } from "./feishu-lark-cli.js";
-import { PairingStore } from "./pairing.js";
+import { computePairingHealth, PairingStore } from "./pairing.js";
 import { DEFAULT_HEARTBEAT_TIMEOUT_MS, InstanceRegistry } from "./registry.js";
 
 export const DEFAULT_HUB_PORT = 8765;
@@ -486,6 +486,10 @@ export async function startHubServer(options: HubServerOptions = {}): Promise<Hu
 		const method = req.method ?? "GET";
 
 		if (method === "GET" && url.pathname === "/health") {
+			const pairingHealth = computePairingHealth({
+				feishuMode: hubConfigSnapshot?.feishu.mode,
+				allowlistSize: allowed.size,
+			});
 			json(res, 200, {
 				ok: true,
 				host,
@@ -494,6 +498,9 @@ export async function startHubServer(options: HubServerOptions = {}): Promise<Hu
 				online: registry.listSnapshots(),
 				bindingCount: bindings.size(),
 				pendingApprovals: approvals.listPending().length,
+				feishuMode: pairingHealth.feishuMode,
+				ownerBound: pairingHealth.ownerBound,
+				needsPairing: pairingHealth.needsPairing,
 			});
 			return;
 		}

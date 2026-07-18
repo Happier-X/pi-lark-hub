@@ -126,9 +126,11 @@ pi -e ./src/index.ts
 ### 2. 绑定飞书本人（推荐，无需手写 ou_xxx）
 
 1. 配置 `feishu.mode=lark-cli`（文件或 `PI_LARK_FEISHU_MODE`），**可先不写** `allowedOpenIds` / `userId`。
-2. Pi 内执行 **`/lark-pair`**，本机显示 6 位配对码（约 5 分钟、用后即废）。
+2. 打开 Pi 并连上 Hub 后：若为 **lark-cli 且尚未绑定**，会**自动**弹出配对码（本进程仅一次）；也可随时手动 **`/lark-pair`**。
 3. 用**本人**飞书账号给机器人发送：`配对 AB12CD`（码以本机展示为准）。
 4. Hub 将发送者 `open_id` 写入白名单与 `feishu.userId`，并**清除** `chatId`（强制本人私聊出站）。
+
+> console 模式不会自动引导；断线重连不会再次自动出码（防刷屏）。
 
 本地模拟（console / 调试）：
 

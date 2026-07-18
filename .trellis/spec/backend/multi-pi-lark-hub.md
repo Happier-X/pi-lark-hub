@@ -94,7 +94,7 @@
 |------|------|
 | 发起 | Pi 命令 `/lark-pair`，或 **lark-cli 未绑定** 时 bridge 在 `register_ok` 后自动 `pair_begin`（每进程最多一次） |
 | 出码 | Hub `PairingStore`：6 位（去易混字符），TTL 5min，单活跃会话，用后即废 |
-| 展示 | Hub→Pi `pair_challenge`；bridge notify 中文口令模板 |
+| 展示 | Hub→Pi `pair_challenge`；bridge notify 中文口令 + 本地 PNG 二维码（`~/.pi/lark-hub/pair-qr.png`，载荷=`配对 CODE`，失败降级短码） |
 | 入站口令 | 文本 `配对 <码>` 或 `pair <码>`（`parsePairCommand`） |
 | 鉴权顺序 | **配对口令先于白名单**；无会话/错码/过期/无 openId → 不改配置 |
 | 成功 | `allowedOpenIds=[open_id]`、`feishu.userId=open_id`、**删除 chatId**；`saveHubOwnerBinding` 落盘；热更新内存 allowlist；`LarkCliFeishuTransport.setRecipient`；WS `pair_result` |

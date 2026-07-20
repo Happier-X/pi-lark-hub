@@ -15,7 +15,6 @@
 | messageId 绑定 | `MessageBindingStore`（`src/hub/bindings.ts`） | 内存 Map；可选 max 条目淘汰 |
 | 审批记录 | `ApprovalStore`（`src/hub/approvals.ts`） | 内存 Map + 超时定时器 |
 | Bridge 远程队列 | `lark-bridge` 内 `queue: QueuedTask[]` | 单 Pi 进程内存；stop/shutdown 清空 |
-| 待审批 / need_reply | bridge 内 `Map` | 单次请求 + 本地超时 |
 
 **没有**：SQL、Redis、ORM、migration、repository 模式。
 
@@ -25,7 +24,6 @@
 
 - 路径默认：`~/.pi/lark-hub/config.json`（`PI_LARK_HUB_CONFIG` 可覆盖）
 - 合并顺序：**defaults < 文件 < 环境变量**（见 `src/hub/config.ts`）
-- 校验：`assertValidHubConfig` — lark-cli 模式强制 allowlist 与 userId/chatId
 
 参考：`src/hub/config.ts`、`src/hub/config.test.ts`、`docs/lark-hub.md`。
 
@@ -53,7 +51,7 @@
 允许通过构造参数 / options 注入 mock（如 `feishu` transport、`fileContent` 配置），避免真实 IO：
 
 - `loadHubConfig({ skipFile: true, fileContent, env })`
-- `LarkCliFeishuTransport` 可注入 `runner` mock spawn
+- `NativeFeishuTransport` 可注入原生客户端，registration 与 WebSocket 运行时也通过 options 注入测试替身
 
 ---
 
@@ -63,7 +61,7 @@
 |------|------|------|
 | 实例 ID | `piId` 字符串 | Hub 生成或客户端提供 |
 | 请求 ID | `requestId` | `generateRequestId()` |
-| 飞书消息 ID | `messageId` | `om_xxx` 或 `console-…` |
+| 飞书消息 ID | `messageId` | 原生飞书返回的 `om_xxx` |
 | open_id | `openId` / 配置 `allowedOpenIds` | `ou_xxx` |
 | 群 | `chatId` | `oc_xxx` |
 

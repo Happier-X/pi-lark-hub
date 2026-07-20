@@ -30,9 +30,6 @@ const notify = (text: string, level: "info" | "warning" | "error" = "info") => {
 |------|-----|------------|
 | 持久连接状态 | `ui.setStatus(key, text?)` | key 固定 `lark-bridge` |
 | 一次性提示 | `ui.notify(text, level)` | 入队、审批、超时、Hub 错误 |
-| 本机确认 | `ui.confirm` / `select` / `input` | Hub 不可用时审批 / need_reply 回退 |
-| 斜杠命令 | `pi.registerCommand` | `/lark-status`、`/lark-ask` |
-| 无 UI 降级 | `console.log` **仅** status 命令 | 见 `/lark-status` |
 
 调用前检查 `activeCtx?.hasUI` / `ctx.hasUI`，避免无头环境抛错。
 

@@ -21,7 +21,6 @@ Bridge 与用户的界面契约：status 条、notify、斜杠命令、本机审
 | TUI 下 `readline` / 抢 `stdin` | raw mode 冲突 |
 | 多行 `console.log`/`stderr` 当 UI | 弄脏 alternate-screen |
 | 无 `hasUI` 强调 `ctx.ui.*` | headless 失败 |
-| 启发式 need_reply（扫 `?`） | 误触远程等待 |
 | Hub 离线时静默丢审批 | 应回退本机 UI 或明确 notify |
 
 ---
@@ -32,8 +31,6 @@ Bridge 与用户的界面契约：status 条、notify、斜杠命令、本机审
 |---------|------|
 | 用户提示 | 优先 `notify` / `setStatus` |
 | 远程任务 | 自有 FIFO + settled 后 drain |
-| 命令 | `/lark-status`、`/lark-ask` 行为稳定、文案中文 |
-| 超时 | 审批 reject；need_reply 取消并 notify |
 | 停机 | 清 queue、pending、status |
 
 ---
@@ -45,7 +42,6 @@ Bridge 与用户的界面契约：status 条、notify、斜杠命令、本机审
   1. Hub 起 + bridge 连接，status 显示 piId
   2. 忙时发远程消息 → 入队 notify → settled 后执行
   3. Escape/abort 后编辑器 **无** 远程残留文本
-  4. `/lark-ask` → 飞书/控制回复绑定 requestId 才解除
   5. 停 Hub → warning + 重连；危险命令可本机审批
 
 ---

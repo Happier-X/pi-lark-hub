@@ -22,8 +22,6 @@
 | `currentFromHub` / `drainingQueue` | 槽占用标志 | 与 `isIdle()` 一起判 busy |
 | `pendingAssistantSummary` | string | `agent_end` → `task_end` |
 | `approvals` | `Map<requestId, PendingApproval>` | 危险命令等待决策 |
-| `needReplies` | `Map<requestId, PendingNeedReply>` | `/lark-ask` 等待回答 |
-| `lastNotifyAck` / `lastNeedReplyAnswer` | 调试快照 | `/lark-status` |
 
 Hub 侧状态见 [../backend/database-guidelines.md](../backend/database-guidelines.md)（`ApprovalStore`、`MessageBindingStore`、`InstanceRegistry`）。
 
@@ -49,7 +47,6 @@ Drain：仅 `tryDrainQueue` 在 idle 且无当前 hub run 时取 **一条**，`p
 | 场景 | 常量（代码内） | 超时行为 |
 |------|----------------|----------|
 | 危险审批 | `APPROVAL_TIMEOUT_MS`（5min） | 视为拒绝 |
-| need_reply | `NEED_REPLY_TIMEOUT_MS`（10min） | resolve 取消；不猜答案 |
 | 心跳 | `HEARTBEAT_MS`（10s） | 发 heartbeat |
 | 重连 | `RECONNECT_MS`（5s） | 非 intentionalClose 时重连 |
 

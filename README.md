@@ -1,222 +1,47 @@
 # pi-lark-hub
 
-本机 **multi-Pi 飞书远程控制**：`pi-lark-hub` 守护进程 + `lark-bridge` Pi 扩展。
+通过飞书原生 OpenAPI 与官方 WebSocket 遥控多个本机 Pi 会话。Hub 只监听 `127.0.0.1`，不需要公网回调，也不依赖外部命令行工具。
 
-用飞书（或 console 模拟）对多个同时运行的 Pi 会话：
-
-- 注册 / 默认路由 / 列表·使用
-- 任务结束通知与按消息绑定回复
-- 危险 bash 远程审批
-- 显式 need_reply（`/lark-ask`）
-
-> **仓库名**：文档与 `package.json` 已按 **`pi-lark-hub`** 书写。若 GitHub 远端仍显示旧名（如 `pi-wechat-ilink` / `pi-lark`），请在 GitHub Settings → Rename，并自行更新 `git remote`。本仓库**不会**代你改 remote。
-
-## 架构
-
-```text
-Pi A (lark-bridge) ──┐
-                     │  WebSocket 127.0.0.1
-Pi B (lark-bridge) ──┼──► pi-lark-hub
-                     │       ├── 注册 / 心跳 / 默认路由
-                     │       ├── messageId → piId 绑定
-                     │       ├── 审批状态机（幂等 / 超时）
-                     │       ├── notify → Console 或 lark-cli 出站
-                     │       └── POST /control/*（始终可用）
-用户（curl / 飞书）──┘
-```
-
-详细配置、安全规则与 curl 验收见 [docs/lark-hub.md](./docs/lark-hub.md)。
-
-## 安装
-
-通过 **GitHub / Git** 装到 Pi（不发布 npm）。装好后默认加载 lark-bridge（`package.json` → `pi.extensions`）。
-
-### 给别人用（推荐）
+## 安装与启动
 
 ```bash
-# HTTPS
-pi install https://github.com/Happier-X/pi-lark-hub
-
-# 等价写法
-pi install git:github.com/Happier-X/pi-lark-hub
-
-# 钉分支 / tag / commit（更稳）
-pi install https://github.com/Happier-X/pi-lark-hub@main
-
-# SSH（本机已配 GitHub key）
-pi install git:git@github.com:Happier-X/pi-lark-hub
-# 或
-pi install ssh://git@github.com/Happier-X/pi-lark-hub
-```
-
-然后重启 Pi 或 `/reload`。更新与卸载：
-
-```bash
-pi list
-pi update https://github.com/Happier-X/pi-lark-hub
-pi remove https://github.com/Happier-X/pi-lark-hub
-```
-
-私有仓库需对方有读权限（HTTPS 登录 / token，或 SSH）。
-
-### 本地开发（已 clone）
-
-```bash
-pi install C:/code/pi-lark-hub
-# 或相对路径
-pi install .
-```
-
-或写入 `~/.pi/agent/settings.json`：
-
-```json
-{
-  "packages": [
-    "C:/code/pi-lark-hub"
-  ]
-}
-```
-
-### 快速加载（不写入 packages）
-
-```bash
-# 默认扩展入口 = lark-bridge（src/index.ts re-export）
-pi -e .
-# 或显式
-pi -e ./src/lark-bridge/index.ts
-```
-
-然后重启 Pi 或 `/reload`。
-
-## 快速开始
-
-### 1. 加载 Bridge（默认自动拉起 Hub）
-
-`pi install` 之后打开 Pi 即可：lark-bridge 在连接 `ws://127.0.0.1:8765` 失败时会**自动在本机拉起** `pi-lark-hub`（loopback），无需每次手敲 `npm run hub`。
-
-Pi 内：
-
-```text
-/lark-status          Hub 连接与 piId
-/lark-ask [prompt]    显式请求飞书/远程回复（need_reply）
-/lark-setup [force]   扫描飞书官方授权二维码并启用原生模式
-/lark-pair            飞书本人短码配对（5 分钟有效）
-```
-
-也可临时加载：
-
-```bash
-pi -e ./src/index.ts
-```
-
-#### 自动拉起说明
-
-| 项 | 行为 |
-|----|------|
-| 默认 | 开启；Hub 不可达时 spawn 本机 hub |
-| 关闭 | 环境变量 `PI_LARK_HUB_AUTOSTART=0`（或 `false` / `no` / `off`） |
-| 生命周期 | **常驻**：关掉 Pi **不会**停止 Hub |
-| 崩溃自愈 | Hub 被杀后，bridge 重连时在冷却（约 30s）后可再拉起 |
-| 更新自愈 | `/health` 能力缺失（如不支持 `pair_begin`）时，仅对 loopback 按 health.pid 结束旧 Hub 并拉起当前版 |
-| 关闭更新重启 | `PI_LARK_HUB_AUTORESTART=0`（不影响 Hub 不可达时的 AUTOSTART） |
-| 非本机 URL | `PI_LARK_HUB_URL` 非 127.0.0.1/localhost 时不自动 spawn/重启 |
-| 自动启动日志 | `~/.pi/lark-hub/hub.log`（失败/超时时 notify 会附路径） |
-| 手动启动（调试） | 包目录 `npm install && npm run hub` |
-| 手动停止 | 结束占用 `8765` 的 node 进程（任务管理器 / `Get-NetTCPConnection` 等） |
-
-> **说明**：Hub 入口依赖运行时包 `tsx`（已在 `dependencies`）。GitHub `pi install` 会装生产依赖；若仍提示缺 tsx，在包安装目录执行 `npm install` 或 `pi update https://github.com/Happier-X/pi-lark-hub`。
-
-### 2. 绑定飞书本人（推荐，无需手写 ou_xxx）
-
-1. 配置 `feishu.mode=lark-cli`（文件或 `PI_LARK_FEISHU_MODE`），**可先不写** `allowedOpenIds` / `userId`。
-2. 打开 Pi 并连上 Hub 后：若为 **lark-cli 且尚未绑定**，会**自动**弹出配对码（本进程仅一次）；也可随时手动 **`/lark-pair`**。本机将生成二维码 PNG（`~/.pi/lark-hub/pair-qr.png`）并尽量自动打开，载荷为口令文案；仍须在飞书发送完成绑定。
-3. 用**本人**飞书账号给机器人发送：`配对 AB12CD`（码以本机展示为准）。
-4. Hub 将发送者 `open_id` 写入白名单与 `feishu.userId`，并**清除** `chatId`（强制本人私聊出站）。
-
-> console 模式不会自动引导；断线重连不会再次自动出码（防刷屏）。
-
-本地模拟（console / 调试）：
-
-```bash
-# 先 /lark-pair 拿到 CODE，再：
-curl -s -X POST http://127.0.0.1:8765/control/message ^
-  -H "Content-Type: application/json" ^
-  -d "{\"text\":\"配对 CODE\",\"openId\":\"ou_your_open_id\"}"
-```
-
-> 若设置了 `PI_LARK_ALLOWED_OPEN_IDS` 等环境变量，重启后可能覆盖文件中的绑定，请清理相关 env。
-
-Hub **仅监听 `127.0.0.1`**（默认端口 `8765`）。
-
-### 3. console 模式验收（无需飞书）
-
-```bash
-curl http://127.0.0.1:8765/health
-curl http://127.0.0.1:8765/instances
-curl -X POST http://127.0.0.1:8765/control/message ^
-  -H "Content-Type: application/json" ^
-  -d "{\"text\":\"列表\"}"
-```
-
-更多：`/notifications`、`/approvals`、`POST /control/approval`，以及 `replyToMessageId` 精确回复，见 [docs/lark-hub.md](./docs/lark-hub.md)。
-
-### 4. 真实飞书（opt-in）
-
-需本机已安装并授权的 `lark-cli`，且配置白名单与收件人：
-
-```bash
-# 环境变量示例（Windows cmd）
-set PI_LARK_FEISHU_MODE=lark-cli
-set PI_LARK_FEISHU_USER_ID=ou_xxx
-set PI_LARK_ALLOWED_OPEN_IDS=ou_xxx
+npm install
 npm run hub
 ```
 
-或写 `~/.pi/lark-hub/config.json`（字段见 docs）。`lark-cli` 模式**强制**非空 allowlist，且必须 `userId` 或 `chatId`。
+Pi 包默认加载 `pi-lark-hub.ts`。Hub 也会由扩展在 loopback 上自动拉起。
 
-## 路由规则摘要
+## 飞书开局
 
-| 场景 | 结果 |
-|------|------|
-| 审批 `requestId` | 精确到创建审批的 `piId`；离线不改投 |
-| `replyToMessageId` 已绑定 | 精确投递；未绑定/离线 fail-closed |
-| 纯文本 + 单在线 | 自动默认并投递 |
-| 纯文本 + 多在线无默认 | 不投递，返回列表；可用「使用 &lt;id&gt;」 |
-| `列表` / `使用` | Hub 本地处理 |
+Pi 内只提供一个命令：
 
-远程文本必须 `pi.sendUserMessage(text)`，**禁止** `deliverAs: "followUp"|"steer"`。忙时走扩展 FIFO，在 `agent_settled` 后 drain。
+```text
+/lark          无凭证时打开飞书官方 PersonalAgent 授权二维码；已有凭证时确认原生连接状态
+/lark reset    停止原生连接，删除凭证、主人绑定和飞书运行配置，允许重新扫码
+```
 
-## 开发
+扫码二维码的载荷是飞书返回的 `verification_uri_complete` URL。registration 必须返回可信真人 `open_id`，且必须与机器人自身 `open_id` 不同；否则开局失败，不保存或启用凭证。
+
+成功后：
+
+- 密钥写入 `~/.pi/lark-hub/credentials.json`，可用 `PI_LARK_HUB_CREDENTIALS` 覆盖路径；
+- `config.json` 只记录 `mode=native`、唯一主人白名单和私聊目标；
+- Hub 热启动原生 OpenAPI transport 与官方 WebSocket 入站；
+- secret 不进入配置摘要、日志或 Pi 通知。
+
+## 能力
+
+- 多 Pi 注册、默认实例选择与精确回复绑定；
+- 飞书文本指令经扩展 FIFO 投递；
+- 任务结束通知；
+- 危险命令审批；
+- 唯一可信主人鉴权。
+
+详细说明见 [docs/lark-hub.md](docs/lark-hub.md)。
+
+## 验证
 
 ```bash
-git clone https://github.com/Happier-X/pi-lark-hub.git
-cd pi-lark-hub
-npm install
 npm run typecheck
 npm test
-npm run hub
 ```
-
-若 clone 的仍是旧仓名目录，以本地路径为准；GitHub Rename 后请同步 remote。
-
-## 目录
-
-```text
-src/index.ts              # re-export lark-bridge
-src/lark-bridge/index.ts  # 唯一 Pi 扩展实现
-src/protocol.ts           # Hub ↔ Pi WebSocket 协议
-src/hub/**                # pi-lark-hub 守护进程
-scripts/pi-lark-hub.mjs
-docs/lark-hub.md
-```
-
-## 安全
-
-- Hub 仅 loopback；勿对公网暴露
-- `lark-cli` 必须白名单；console 空白名单仅限本地开发
-- 审批超时默认拒绝；离线审批不改投其他 Pi
-- 能给 bot 发消息的人即可注入当前 Pi 会话任务——控制飞书可见范围
-
-## License
-
-MIT

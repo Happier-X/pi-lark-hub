@@ -21,7 +21,6 @@ Hub 日志是 **单行前缀文本**，不是 JSON structured logger，也没有
 
 ### 机制
 
-- 默认：`options.log ?? ((line) => console.log(line))`（见 `src/hub/server.ts`、`feishu-inbound.ts`、`feishu-lark-cli.ts`）
 - CLI 启动摘要：`console.log("[pi-lark-hub] 配置摘要:")` + `formatConfigSummary`
 - 致命配置/安全错误：`console.error` 后 `process.exit(1)`
 
@@ -31,7 +30,6 @@ Hub 日志是 **单行前缀文本**，不是 JSON structured logger，也没有
 |------|----------|
 | `[hub] …` | WS 注册、notify、错误投递 |
 | `[pi-lark-hub] …` | CLI 层安全限制、回写失败 |
-| console transport | 直接打印 event / messageId / title/body（开发模拟飞书） |
 
 记录 **什么**：
 
@@ -92,15 +90,12 @@ const notify = (text: string, level: "info" | "warning" | "error" = "info") => {
 |-----|------|
 | `setStatus("lark-bridge", text)` | 持久状态条：连接中 / piId / 断开 |
 | `notify(text, level)` | 一次性提示：入队、审批、超时、Hub 错误 |
-| `console.log` | **仅** `/lark-status` 在 `!ctx.hasUI` 时的降级输出 |
 
 ### level 选用
 
 | level | 场景 |
 |-------|------|
-| `info` | 已注册、入队、批准、need_reply 收到回答 |
 | `warning` | Hub 断开/重试、本机回退审批、超时取消、Hub 业务错误 |
-| `error` | need_reply 发送失败等明确失败 |
 
 文案使用 **中文**，可附 `piId` / `requestId` 短截断便于排查。
 
@@ -122,5 +117,4 @@ const notify = (text: string, level: "info" | "warning" | "error" = "info") => {
 ## 验收相关
 
 - Hub 本地：终端能看到 `[hub]` / 配置摘要即可
-- Bridge：状态条 + notify；`/lark-status` 可读
 - 单元测试：不依赖真实 console 断言（可注入 `log`）

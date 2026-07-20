@@ -38,8 +38,6 @@ export default function larkBridge(pi: ExtensionAPI) {
 
 | 命令 | 行为 |
 |------|------|
-| `/lark-status` | 展示连接、piId、最近 notify_ack |
-| `/lark-ask [prompt]` | 显式 need_reply；禁止用模型 `?` 启发式代替 |
 
 注册方式：`pi.registerCommand({ name, ... })`（以现有代码为准）。
 
@@ -48,7 +46,6 @@ export default function larkBridge(pi: ExtensionAPI) {
 ## 规则
 
 1. **drain 顺序**：`agent_settled` 上 reply-then-drain，不可在 `agent_end` 抢跑清队列导致串台。
-2. **need_reply**：只消费 `source === "reply"` 且带匹配 `replyToRequestId` 的消息。
 3. **不要**引入 React Query / SWR 等前端数据 hook；Hub 通信是 WS 消息驱动。
 
 ---
@@ -56,5 +53,4 @@ export default function larkBridge(pi: ExtensionAPI) {
 ## 反模式
 
 - 在 `setInterval` 里 `sendUserMessage` 刷任务
-- 用「扫描 assistant 文本是否含问号」触发 need_reply
 - 把远程任务塞进 Pi followUp 队列「图省事」

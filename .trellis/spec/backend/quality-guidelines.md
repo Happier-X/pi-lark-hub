@@ -28,7 +28,7 @@ This package is a **Pi coding-agent extension** for multi-Pi Feishu remote contr
 |---------|------|
 | Busy-path remote tasks | Extension-owned FIFO (e.g. lark-bridge queue); drain **one** item on `agent_settled` **after** clearing current remote flags; submit with `pi.sendUserMessage(text)` **without** `deliverAs`. |
 | Multi-Pi Feishu path | Use `pi-lark-hub` + `lark-bridge`; see [multi-pi-lark-hub.md](./multi-pi-lark-hub.md). |
-| 默认包扩展 | `pi-lark-hub.ts` 经 `src/index.ts` re-export lark-bridge；package `pi.extensions` 默认加载该包根入口。Pi 显示名按入口路径规则处理，不承诺直接使用 package name。 |
+| 默认包扩展 | 包根 `index.ts` 经 `src/index.ts` re-export lark-bridge；`pi.extensions` 指向 `./index.ts`。Pi 对 `index.ts` 入口显示包名/父目录名（`pi-lark-hub`），非 `*.ts` 文件名。 |
 | Slot occupancy | Ingress treats “current remote run / current remote request / draining / !isIdle()” as busy → enqueue. |
 | Typecheck | `npm run typecheck` must pass before claiming done. |
 

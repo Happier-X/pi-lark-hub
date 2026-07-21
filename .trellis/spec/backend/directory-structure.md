@@ -12,7 +12,7 @@
 |------|------|------|
 | 共享协议 | `src/protocol.ts` | Pi ↔ Hub 的 JSON 消息类型、序列化/解析 |
 | Hub 守护进程 | `src/hub/*` | 本机 loopback HTTP + WebSocket、路由、审批、飞书出站/入站 |
-| 包入口 | `pi-lark-hub.ts` | 默认 `pi.extensions`：以产品名作为入口文件名，并经 `src/index.ts` re-export lark-bridge |
+| 包入口 | `index.ts` | 默认 `pi.extensions`：包根 `index.ts`（Pi 显示为包名 `pi-lark-hub`），经 `src/index.ts` re-export lark-bridge |
 | CLI bin | `scripts/pi-lark-hub.mjs` | 发布后启动 hub |
 | 产品文档 | `docs/lark-hub.md` | 配置、安全、curl 验收（给人读） |
 | 合约式规范 | `.trellis/spec/backend/multi-pi-lark-hub.md` | 给 AI/实现用的可执行约定 |
@@ -24,7 +24,7 @@
 ```text
 pi-lark-hub/
 ├── package.json              # bin、pi.extensions、scripts
-├── pi-lark-hub.ts            # 带产品名的默认 Pi 扩展入口
+├── index.ts                  # 默认 Pi 扩展入口（Pi 列表显示包名）
 ├── tsconfig.json             # strict + NodeNext，noEmit
 ├── scripts/
 │   └── pi-lark-hub.mjs       # npm bin → 启动 hub
@@ -74,7 +74,7 @@ protocol → （无业务依赖）
 
 ### 不要
 
-- 不要在 `pi-lark-hub.ts` 或 `src/index.ts` 写业务逻辑（只做 re-export）
+- 不要在包根 `index.ts` 或 `src/index.ts` 写业务逻辑（只做 re-export）
 - 不要把 Hub 状态写到磁盘/数据库（当前设计全是进程内内存）
 - 不要引入与「本机 loopback multi-Pi」无关的云端服务层目录
 
@@ -85,7 +85,7 @@ protocol → （无业务依赖）
 | 入口 | 命令 / 加载方式 | 源文件 |
 |------|-----------------|--------|
 | Hub | `npm run hub` / `pi-lark-hub` | `src/hub/cli.ts` |
-| 默认 Pi 扩展 | `pi.extensions` → `./pi-lark-hub.ts` | 经 `src/index.ts` re-export → `lark-bridge` |
+| 默认 Pi 扩展 | `pi.extensions` → `./index.ts` | 经 `src/index.ts` re-export → `lark-bridge`；列表显示 `pi-lark-hub` |
 | 显式 Bridge | `pi -e ./src/lark-bridge/index.ts` | `src/lark-bridge/index.ts` |
 
 ---

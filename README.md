@@ -9,7 +9,7 @@ npm install
 npm run hub
 ```
 
-Pi 包默认加载 `pi-lark-hub.ts`。Hub 也会由扩展在 loopback 上自动拉起。
+Pi 包默认加载包根 `index.ts`（扩展列表显示为 `pi-lark-hub`）。Hub 也会由扩展在 loopback 上自动拉起。
 
 ## 飞书开局
 

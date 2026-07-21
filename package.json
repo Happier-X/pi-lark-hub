@@ -29,7 +29,7 @@
   },
   "files": [
     "src",
-    "pi-lark-hub.ts",
+    "index.ts",
     "scripts",
     "docs",
     "README.md",
@@ -38,7 +38,7 @@
   ],
   "pi": {
     "extensions": [
-      "./pi-lark-hub.ts"
+      "./index.ts"
     ]
   },
   "scripts": {

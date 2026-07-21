@@ -38,6 +38,10 @@
 
 密钥文件尽量使用 `0600`；app secret 不写入 config、日志或通知。
 
+## 出站渲染
+
+任务结束、审批等 `notify` 统一经 `NativeFeishuTransport.send`：优先发送 `msg_type=interactive` 卡片（header 放 title，body 用 markdown 模块渲染表格/代码块/列表），失败自动降级 `msg_type=text`；绑定使用最终成功的 `message_id`。超长正文在出站层单条截断并追加「…（已截断）」。
+
 ## 协议
 
 Pi → Hub：`register`、`heartbeat`、`notify`、`unregister`、`lark_open`、`lark_reset`。

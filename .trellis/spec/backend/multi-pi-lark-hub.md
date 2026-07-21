@@ -35,6 +35,12 @@ Hub features 必须包含 `lark_open` 与 `lark_reset`。
 
 中止 registration、停止 WS、删除 credentials、清除 config 的 `feishu`、`allowedOpenIds`、`requireAllowlist`，并将内存 transport 置为不可发送状态。
 
+## 出站
+
+- 全部 `notify` 出站优先 `msg_type=interactive` 卡片 Markdown（header=title，elements markdown=body）；失败降级 `msg_type=text`。
+- 绑定使用最终成功发送的 `message_id`（卡片成功用卡片 id，降级 text 用 text id）。
+- 超长正文单条截断并追加 `…（已截断）`，不拆多条。
+
 ## 路由
 
 - 飞书入站 open_id 必须等于唯一主人；空名单全部拒绝。

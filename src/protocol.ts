@@ -33,6 +33,12 @@ export type NotifyMessage = {
 export type UnregisterMessage = { type: "unregister"; piId: string };
 export type LarkOpenMessage = { type: "lark_open"; piId: string };
 export type LarkResetMessage = { type: "lark_reset"; piId: string };
+/** Pi 确认已收到审批结果，Hub 方可 markDelivered */
+export type ApprovalResultAckMessage = {
+	type: "approval_result_ack";
+	piId: string;
+	requestId: string;
+};
 export type RegisterOkMessage = { type: "register_ok"; piId: string };
 export type NotifyAckMessage = { type: "notify_ack"; requestId: string; messageId: string };
 export type UserMessage = {
@@ -71,7 +77,8 @@ export type PiToHubMessage =
 	| NotifyMessage
 	| UnregisterMessage
 	| LarkOpenMessage
-	| LarkResetMessage;
+	| LarkResetMessage
+	| ApprovalResultAckMessage;
 export type HubToPiMessage =
 	| RegisterOkMessage
 	| NotifyAckMessage
@@ -142,6 +149,7 @@ const PI_TO_HUB_TYPES = new Set([
 	"unregister",
 	"lark_open",
 	"lark_reset",
+	"approval_result_ack",
 ]);
 const HUB_TO_PI_TYPES = new Set([
 	"register_ok",
@@ -377,6 +385,16 @@ function decodePiToHubObject(data: Record<string, unknown>): ProtocolDecodeResul
 			const piId = requireString(data, "piId", PROTOCOL_LIMITS.id);
 			if (isError(piId)) return piId;
 			return { ok: true, message: { type, piId: piId! } as PiToHubMessage };
+		}
+		case "approval_result_ack": {
+			const piId = requireString(data, "piId", PROTOCOL_LIMITS.id);
+			if (isError(piId)) return piId;
+			const requestId = requireString(data, "requestId", PROTOCOL_LIMITS.id);
+			if (isError(requestId)) return requestId;
+			return {
+				ok: true,
+				message: { type: "approval_result_ack", piId: piId!, requestId: requestId! },
+			};
 		}
 		default:
 			return fail("unknown_type", `未知消息类型：${String(type)}`);

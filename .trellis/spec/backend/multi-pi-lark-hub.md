@@ -15,9 +15,12 @@ Pi 只注册：
 
 ## 协议
 
-Pi → Hub：`register`、`heartbeat`、`notify`、`unregister`、`lark_open`、`lark_reset`。
+Pi → Hub：`register`、`heartbeat`、`notify`、`unregister`、`lark_open`、`lark_reset`、`approval_result_ack`。
 
 Hub → Pi：`register_ok`、`notify_ack`、`user_message`、`approval_result`、`error`、`lark_challenge`、`lark_result`。
+
+- 同一 Pi 扩展生命周期内重连应在 `register` 携带上次 `piId`。
+- Hub 发送 `approval_result` 后，仅在收到对应 `approval_result_ack` 时 `markDelivered`；未 ack 前允许向原 piId 重投，禁止改投。
 
 Hub features 必须包含 `lark_open` 与 `lark_reset`。
 

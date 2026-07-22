@@ -330,7 +330,14 @@ export default function larkBridge(pi: ExtensionAPI) {
 						msg.decision === "approve" ? "info" : "warning",
 					);
 				}
-				// 重复/未知 requestId：忽略（幂等）
+				// 无论是否本地首次应用，均 ack 以便 Hub markDelivered（幂等）
+				if (piId) {
+					send({
+						type: "approval_result_ack",
+						piId,
+						requestId: msg.requestId,
+					});
+				}
 				return;
 			}
 			case "error": {
@@ -434,6 +441,8 @@ export default function larkBridge(pi: ExtensionAPI) {
 				cwd,
 				pid: process.pid,
 				capabilities: ["approval", "prompt", "settled"],
+				// 同一扩展生命周期内重连复用 piId，保持审批/绑定连续性
+				...(piId ? { piId } : {}),
 			};
 			ws.send(serializeMessage(registerMsg));
 		});

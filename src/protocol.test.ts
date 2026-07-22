@@ -67,6 +67,13 @@ describe("decodePiToHubMessage", () => {
 		if (!frame.ok) assert.ok(frame.code === "frame_too_large" || frame.code === "invalid_json");
 	});
 
+	it("接受 approval_result_ack", () => {
+		const r = decodePiToHubMessage(
+			JSON.stringify({ type: "approval_result_ack", piId: "a", requestId: "r" }),
+		);
+		assert.equal(r.ok, true);
+	});
+
 	it("合法 notify 含 actions", () => {
 		const r = decodePiToHubMessage(
 			JSON.stringify({

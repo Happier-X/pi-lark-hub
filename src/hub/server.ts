@@ -172,9 +172,9 @@ export async function startHubServer(options: HubServerOptions = {}): Promise<Hu
 			actorOpenId: input.actorOpenId,
 		});
 		if (delivered) {
-			approvalsRef.markDelivered(input.requestId);
+			// 仅 socket 写出成功；真正 markDelivered 等 Pi 的 approval_result_ack
 			log(
-				`[hub] approval_result → piId=${input.piId} requestId=${input.requestId} decision=${input.decision}`,
+				`[hub] approval_result → piId=${input.piId} requestId=${input.requestId} decision=${input.decision}（待 Pi 确认）`,
 			);
 		} else {
 			// 不 markDelivered，标 failed 以便 Pi 恢复后可重试；绝不改投其他实例
@@ -458,6 +458,26 @@ export async function startHubServer(options: HubServerOptions = {}): Promise<Hu
 				piSockets.delete(m.piId);
 				client.piId = null;
 				log(`[hub] unregister piId=${m.piId}`);
+				return;
+			}
+			case "approval_result_ack": {
+				const m = msg as Extract<PiToHubMessage, { type: "approval_result_ack" }>;
+				if (!client.piId || m.piId !== client.piId) {
+					safeSend(client.socket, {
+						type: "error",
+						message: "approval_result_ack 失败：piId 与连接绑定不一致",
+					});
+					return;
+				}
+				const rec = approvals.get(m.requestId);
+				if (!rec || rec.piId !== m.piId) {
+					// 未知或归属不符：忽略（幂等）
+					return;
+				}
+				approvals.markDelivered(m.requestId);
+				log(
+					`[hub] approval_result_ack piId=${m.piId} requestId=${m.requestId}`,
+				);
 				return;
 			}
 			case "lark_open": { const m = msg as Extract<PiToHubMessage, { type: "lark_open" }>; if (!client.piId || m.piId !== client.piId) { safeSend(client.socket, { type: "error", message: "lark 操作失败：piId 不一致" }); return; } if (!setupTask) setupTask = handleSetup(client).finally(() => { setupTask = null; }); else safeSend(client.socket, { type: "error", message: "已有扫码开局正在进行，请等待其结束" }); return; }

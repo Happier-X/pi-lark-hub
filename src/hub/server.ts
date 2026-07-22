@@ -30,6 +30,7 @@ import type { FeishuTransport } from "./feishu-transport.js";
 import { NoopFeishuTransport } from "./feishu-transport.js";
 import { NotifyStore } from "./notify-store.js";
 import { DEFAULT_HEARTBEAT_TIMEOUT_MS, InstanceRegistry } from "./registry.js";
+import type { HubStatusSnapshot } from "./status-report.js";
 
 export const DEFAULT_HUB_PORT = 8765;
 export const DEFAULT_HUB_HOST = "127.0.0.1";
@@ -209,11 +210,32 @@ export async function startHubServer(options: HubServerOptions = {}): Promise<Hu
 		});
 	approvalsRef = approvals;
 
+	const getStatusSnapshot = (): HubStatusSnapshot => {
+		const creds = loadCredentials(options.credentialsFile ?? credentialsPath());
+		return {
+			packageVersion,
+			host,
+			port,
+			pid: process.pid,
+			feishuMode: "native",
+			ownerBound: allowed.size > 0,
+			needsPairing: allowed.size === 0,
+			credentialsPresent: Boolean(creds),
+			credentialsUpdatedAt: creds?.updatedAt ?? 0,
+			defaultPiId: registry.getDefaultPiId(),
+			online: registry.listSnapshots(),
+			pendingApprovals: approvals.listPending().length,
+			bindingCount: bindings.size(),
+			nativeWsAttached: Boolean(nativeRuntimeStop),
+		};
+	};
+
 	const controlCtx = {
 		registry,
 		bindings,
 		approvals,
 		isAuthorized,
+		getStatusSnapshot,
 	};
 
 	const handleNotify = async (client: ClientState, m: NotifyMessage) => {
@@ -512,21 +534,24 @@ export async function startHubServer(options: HubServerOptions = {}): Promise<Hu
 		const method = req.method ?? "GET";
 
 		if (method === "GET" && url.pathname === "/health") {
-			const pairingHealth = { feishuMode: "native", ownerBound: allowed.size > 0, needsPairing: allowed.size === 0 };
+			const snap = getStatusSnapshot();
 			json(res, 200, {
 				ok: true,
-				pid: process.pid,
-				packageVersion,
+				pid: snap.pid,
+				packageVersion: snap.packageVersion,
 				features: [...HUB_FEATURES],
-				host,
-				port,
-				defaultPiId: registry.getDefaultPiId(),
-				online: registry.listSnapshots(),
-				bindingCount: bindings.size(),
-				pendingApprovals: approvals.listPending().length,
-				feishuMode: pairingHealth.feishuMode,
-				ownerBound: pairingHealth.ownerBound,
-				needsPairing: pairingHealth.needsPairing,
+				host: snap.host,
+				port: snap.port,
+				defaultPiId: snap.defaultPiId,
+				online: snap.online,
+				bindingCount: snap.bindingCount,
+				pendingApprovals: snap.pendingApprovals,
+				feishuMode: snap.feishuMode,
+				ownerBound: snap.ownerBound,
+				needsPairing: snap.needsPairing,
+				credentialsPresent: snap.credentialsPresent,
+				credentialsUpdatedAt: snap.credentialsUpdatedAt,
+				nativeWsAttached: snap.nativeWsAttached,
 			});
 			return;
 		}

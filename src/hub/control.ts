@@ -18,6 +18,7 @@ import {
 	routeUseCommand,
 	type RouteDecision,
 } from "./router.js";
+import { formatHubStatusReport, isStatusCommand, type HubStatusSnapshot } from "./status-report.js";
 
 export type ControlResult = {
 	/** 回给用户（飞书 / curl）的文本 */
@@ -41,6 +42,7 @@ export type ControlResult = {
 	decision:
 		| RouteDecision
 		| { kind: "list" }
+		| { kind: "status" }
 		| { kind: "reply"; piId: string; messageId: string }
 		| { kind: "reply_unbound"; messageId: string }
 		| { kind: "reply_offline"; piId: string; messageId: string }
@@ -64,6 +66,8 @@ export type ControlContext = {
 	approvals?: ApprovalStore;
 	/** 是否授权；空白名单策略由调用方 isAuthorized 决定 */
 	isAuthorized?: (openId?: string) => boolean;
+	/** 可选：状态诊断快照工厂 */
+	getStatusSnapshot?: () => HubStatusSnapshot;
 };
 
 /**
@@ -81,7 +85,7 @@ export function handleControlMessage(
 
 	if (!text) {
 		return {
-			reply: "请发送文字消息。可用命令：列表、使用 <piId|项目名>",
+			reply: "请发送文字消息。可用命令：列表、使用 <piId|项目名>、状态",
 			decision: { kind: "ignored", reason: "empty" },
 		};
 	}
@@ -112,6 +116,19 @@ export function handleControlMessage(
 
 	const online = ctx.registry.listSnapshots();
 	const defaultPiId = ctx.registry.getDefaultPiId();
+
+	if (isStatusCommand(text)) {
+		if (!ctx.getStatusSnapshot) {
+			return {
+				reply: "状态诊断暂不可用。",
+				decision: { kind: "status" },
+			};
+		}
+		return {
+			reply: formatHubStatusReport(ctx.getStatusSnapshot()),
+			decision: { kind: "status" },
+		};
+	}
 
 	if (isListCommand(text)) {
 		return {

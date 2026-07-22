@@ -12,11 +12,13 @@
  *
  * 命令：
  *   /lark                 连接或发起官方扫码
+ *   /lark status          脱敏诊断（Hub/凭证/在线 Pi）
  *   /lark reset           清理凭证并重新开局
  */
 
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import WebSocket from "ws";
+import { formatHubStatusReport, type HubStatusSnapshot } from "../hub/status-report.js";
 import {
 	generateRequestId,
 	decodeHubToPiMessage,
@@ -29,7 +31,9 @@ import {
 } from "../protocol.js";
 import {
 	ensureHubRunning,
-		isAutostartEnabled,
+	fetchHubHealthDetail,
+	hubUrlToHttpOrigin,
+	isAutostartEnabled,
 	type EnsureHubResult,
 } from "./hub-autostart.js";
 import { NotifyAckQueue, type PendingNotifyPayload } from "./notify-queue.js";
@@ -679,15 +683,71 @@ export default function larkBridge(pi: ExtensionAPI) {
 		};
 	});
 
+	const reportLocalStatus = async () => {
+		const origin = hubUrlToHttpOrigin(DEFAULT_HUB_URL);
+		const health = origin ? await fetchHubHealthDetail(origin, 1500) : null;
+		const bridgeLines = [
+			"【Bridge 本机】",
+			`WS连接=${connected ? "是" : "否"}  piId=${piId ?? "（未注册）"}`,
+			`Hub URL=${DEFAULT_HUB_URL}`,
+			`队列=${queue.length}  本地待审批=${[...approvals.values()].filter((a) => !a.done).length}`,
+			`notify待确认=${notifyAckQueue.size()}`,
+		];
+		if (!health) {
+			notify(
+				[...bridgeLines, "", "Hub /health 不可达：请确认 npm run hub 或允许自动拉起"].join("\n"),
+				"warning",
+			);
+			return;
+		}
+		const snap: HubStatusSnapshot = {
+			packageVersion: typeof health.packageVersion === "string" ? health.packageVersion : "unknown",
+			host: typeof health.host === "string" ? health.host : "127.0.0.1",
+			port: typeof health.port === "number" ? health.port : 8765,
+			pid: typeof health.pid === "number" ? health.pid : undefined,
+			feishuMode: typeof health.feishuMode === "string" ? health.feishuMode : "native",
+			ownerBound: Boolean(health.ownerBound),
+			needsPairing: Boolean(health.needsPairing),
+			credentialsPresent: Boolean(health.credentialsPresent),
+			credentialsUpdatedAt:
+				typeof health.credentialsUpdatedAt === "number" ? health.credentialsUpdatedAt : 0,
+			defaultPiId:
+				typeof health.defaultPiId === "string" || health.defaultPiId === null
+					? (health.defaultPiId as string | null)
+					: null,
+			online: Array.isArray(health.online) ? (health.online as HubStatusSnapshot["online"]) : [],
+			pendingApprovals:
+				typeof health.pendingApprovals === "number" ? health.pendingApprovals : 0,
+			bindingCount: typeof health.bindingCount === "number" ? health.bindingCount : 0,
+			nativeWsAttached:
+				typeof health.nativeWsAttached === "boolean" ? health.nativeWsAttached : undefined,
+		};
+		notify(`${formatHubStatusReport(snap)}\n\n${bridgeLines.join("\n")}`, "info");
+	};
+
 	pi.registerCommand("lark", {
-		description: "连接飞书原生运行时；使用 /lark reset 清理后重新扫码",
+		description: "连接飞书原生运行时；/lark status 诊断；/lark reset 清理后重扫码",
 		handler: async (args, ctx) => {
 			activeCtx = ctx;
 			const arg = (args ?? "").trim().toLowerCase();
-			if (arg && arg !== "reset") { notify("用法：/lark 或 /lark reset", "warning"); return; }
-			if (!connected || !piId) { notify("尚未连接 Hub，正在重试，请稍后再次执行 /lark", "warning"); await connectHubWithEnsure(ctx); return; }
+			if (arg === "status" || arg === "诊断") {
+				await reportLocalStatus();
+				return;
+			}
+			if (arg && arg !== "reset") {
+				notify("用法：/lark | /lark status | /lark reset", "warning");
+				return;
+			}
+			if (!connected || !piId) {
+				notify("尚未连接 Hub，正在重试，请稍后再次执行 /lark", "warning");
+				await connectHubWithEnsure(ctx);
+				return;
+			}
 			const type = arg === "reset" ? "lark_reset" : "lark_open";
-			if (!send({ type, piId } as PiToHubMessage)) { notify("飞书操作发送失败", "error"); return; }
+			if (!send({ type, piId } as PiToHubMessage)) {
+				notify("飞书操作发送失败", "error");
+				return;
+			}
 			status(arg === "reset" ? "正在重置飞书…" : "正在连接飞书…");
 		},
 	});

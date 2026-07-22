@@ -126,6 +126,7 @@ describe("command parsers", () => {
 		assert.equal(isListCommand("list"), true);
 		assert.equal(isListCommand("ls"), true);
 		assert.equal(isListCommand("hello"), false);
+		assert.equal(isListCommand("状态"), false);
 	});
 
 	it("parseUseCommand", () => {
@@ -210,6 +211,38 @@ describe("InstanceRegistry", () => {
 });
 
 describe("handleControlMessage", () => {
+	it("状态命令返回诊断文本", () => {
+		const reg = new InstanceRegistry({ heartbeatTimeoutMs: 30_000 });
+		reg.register({
+			piId: "pi-s",
+			displayName: "s",
+			cwd: "/tmp/s",
+			pid: 1,
+			capabilities: [],
+		});
+		const r = handleControlMessage(
+			{
+				registry: reg,
+				getStatusSnapshot: () => ({
+					packageVersion: "0.1.0",
+					host: "127.0.0.1",
+					port: 8765,
+					feishuMode: "native",
+					ownerBound: true,
+					needsPairing: false,
+					credentialsPresent: true,
+					credentialsUpdatedAt: 0,
+					defaultPiId: "pi-s",
+					online: reg.listSnapshots(),
+					pendingApprovals: 0,
+					bindingCount: 0,
+				}),
+			},
+			{ text: "状态", openId: "ou_x" },
+		);
+		assert.equal(r.decision.kind, "status");
+		assert.match(r.reply, /pi-lark-hub 状态/);
+	});
 	it("列表与使用 + 投递", () => {
 		const reg = new InstanceRegistry();
 		reg.register({

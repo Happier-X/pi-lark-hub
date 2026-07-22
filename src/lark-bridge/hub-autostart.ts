@@ -42,6 +42,15 @@ export type HubHealthStatus = {
 	feishuMode?: string;
 	ownerBound?: boolean;
 	needsPairing?: boolean;
+	host?: string;
+	port?: number;
+	defaultPiId?: string | null;
+	online?: unknown[];
+	bindingCount?: number;
+	pendingApprovals?: number;
+	credentialsPresent?: boolean;
+	credentialsUpdatedAt?: number;
+	nativeWsAttached?: boolean;
 };
 
 export const REQUIRED_HUB_FEATURES = ["lark_open", "lark_reset"] as const;

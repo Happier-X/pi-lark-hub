@@ -32,6 +32,12 @@
 - `GET /notifications` 返回 `records`（状态、messageIds、脱敏 error），无完整 body。
 - 失败后可 `POST /control/notify-retry` 或飞书 `重试 <requestId前缀>` 显式整单重试；已成功幂等；不做分批续发。
 
+## 开发与发布检查
+
+- `npm test`：自动收集 `src` 下全部 `*.test.ts`（含 Hub HTTP/WS e2e）。
+- `npm run check`：`tsc --noEmit` + 入口脚本语法检查（失败即非 0）。
+- `prepublishOnly`：typecheck + test。
+
 ## HTTP 控制面（本机）
 
 - 默认仅 loopback。可选环境变量 `PI_LARK_HUB_CONTROL_TOKEN`（或配置 `control.token`）：配置后除 `GET /health` 外需 `Authorization: Bearer <token>` 或 `X-Lark-Hub-Token`。

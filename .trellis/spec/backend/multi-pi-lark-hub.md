@@ -74,4 +74,4 @@ Hub features 必须包含 `lark_open` 与 `lark_reset`。
 
 ## 验证
 
-`npm run typecheck`、`npm test`、`git diff --check` 必须通过。
+`npm run typecheck`、`npm test`（自动发现测试 + Hub e2e）、`npm run check`、`git diff --check` 必须通过。发布前 `prepublishOnly` 含 typecheck 与 test。

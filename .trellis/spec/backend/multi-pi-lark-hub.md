@@ -47,6 +47,7 @@ Hub features 必须包含 `lark_open` 与 `lark_reset`。
 - 全部 `notify` 出站优先 `msg_type=interactive` 卡片 Markdown（header=title，elements 为按组件限制分段的 markdown）；失败降级 `msg_type=text`。
 - 长正文在同一张卡片内分段；若超过飞书消息体限制，则顺序发送多张带“第 i/N 部分”标题的卡片。纯文本降级同样分批，正文不得静默截断。
 - 绑定使用全部批次成功后第一条消息的真实 `message_id`（卡片成功用首条卡片 id，降级 text 用首条 text id）。
+- 相同 `piId+requestId+event` 的 notify 必须幂等：内容一致则重放返回原 `messageId` 且不重复调用飞书；内容冲突则拒绝。Bridge 对 notify 等待 `notify_ack`，超时有限重试，重连后重放未确认项。
 
 ## 路由
 

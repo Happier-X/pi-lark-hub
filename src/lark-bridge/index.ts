@@ -32,6 +32,7 @@ import {
 		isAutostartEnabled,
 	type EnsureHubResult,
 } from "./hub-autostart.js";
+import { NotifyAckQueue, type PendingNotifyPayload } from "./notify-queue.js";
 import { openPathBestEffort, writeSetupQrPng } from "./setup-qr.js";
 
 const STATUS_KEY = "lark-bridge";
@@ -132,6 +133,26 @@ export default function larkBridge(pi: ExtensionAPI) {
 	let pendingAssistantSummary = "";
 	let lastNotifyAck: { requestId: string; messageId: string } | null = null;
 	const approvals = new Map<string, PendingApproval>();
+	const notifyAckQueue = new NotifyAckQueue({
+		maxAttempts: 3,
+		ackTimeoutMs: 8_000,
+		onGiveUp: (item, reason) => {
+			notify(
+				`通知未确认（${item.payload.event} ${item.payload.requestId.slice(0, 12)}…）：${reason}`,
+				"warning",
+			);
+		},
+	});
+
+	const sendNotifyReliable = (payload: PendingNotifyPayload): boolean => {
+		notifyAckQueue.setSend((p) => send(p));
+		const r = notifyAckQueue.enqueue(payload);
+		if (!r.ok) {
+			notify(r.reason ?? "notify 队列已满", "warning");
+			return false;
+		}
+		return true;
+	};
 
 	const status = (text?: string) => {
 		if (activeCtx?.hasUI) activeCtx.ui.setStatus(STATUS_KEY, text);
@@ -261,7 +282,7 @@ export default function larkBridge(pi: ExtensionAPI) {
 			"回复本条消息可继续向该 Pi 发指令。",
 		].join("\n");
 
-		send({
+		sendNotifyReliable({
 			type: "notify",
 			piId,
 			event: "task_end",
@@ -285,6 +306,8 @@ export default function larkBridge(pi: ExtensionAPI) {
 				status(`飞书 Hub ✓ ${piId}`);
 				notify(`已注册到 pi-lark-hub\npiId: ${piId}`, "info");
 				startHeartbeat();
+				notifyAckQueue.setSend((p) => send(p));
+				notifyAckQueue.flush();
 				return;
 			}
 			case "notify_ack": {
@@ -292,6 +315,7 @@ export default function larkBridge(pi: ExtensionAPI) {
 					requestId: msg.requestId,
 					messageId: msg.messageId,
 				};
+				notifyAckQueue.ack(msg.requestId);
 				return;
 			}
 			case "user_message": {
@@ -495,6 +519,7 @@ export default function larkBridge(pi: ExtensionAPI) {
 			}
 		}
 		approvals.clear();
+		notifyAckQueue.clear();
 		disconnectHub();
 		activeCtx = null;
 	});
@@ -569,7 +594,7 @@ export default function larkBridge(pi: ExtensionAPI) {
 
 		// 向 Hub 上报审批（若在线）
 		if (hubOnline && piId) {
-			const sent = send({
+			const sent = sendNotifyReliable({
 				type: "notify",
 				piId,
 				event: "approval",

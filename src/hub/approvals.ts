@@ -106,12 +106,20 @@ export class ApprovalStore {
 		if (!input.piId.trim()) throw new Error("piId 不能为空");
 
 		const existing = this.records.get(requestId);
-		// 已 terminal：不覆盖，返回原记录（幂等）
-		if (existing && existing.status !== "pending") {
-			return cloneRecord(existing);
+		if (existing) {
+			// 已 terminal：不覆盖（幂等）
+			if (existing.status !== "pending") {
+				return cloneRecord(existing);
+			}
+			// pending 同 piId：不重置超时、不覆盖正文
+			if (existing.piId === input.piId) {
+				return cloneRecord(existing);
+			}
+			// pending 不同 piId：冲突，禁止改投
+			throw new Error(
+				`审批 requestId 冲突：${requestId} 已归属 ${existing.piId}，拒绝改写为 ${input.piId}`,
+			);
 		}
-
-		this.clearTimeoutTimer(requestId);
 
 		const timeoutMs =
 			typeof input.timeoutMs === "number" && input.timeoutMs > 0

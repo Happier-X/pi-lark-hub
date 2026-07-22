@@ -28,6 +28,7 @@ import { NativeFeishuTransport } from "./feishu-native.js";
 import { handleControlApproval, handleControlMessage } from "./control.js";
 import type { FeishuTransport } from "./feishu-transport.js";
 import { NoopFeishuTransport } from "./feishu-transport.js";
+import { NotifyStore } from "./notify-store.js";
 import { DEFAULT_HEARTBEAT_TIMEOUT_MS, InstanceRegistry } from "./registry.js";
 
 export const DEFAULT_HUB_PORT = 8765;
@@ -118,6 +119,7 @@ export async function startHubServer(options: HubServerOptions = {}): Promise<Hu
 	let feishu: FeishuTransport = options.feishu ?? new NoopFeishuTransport();
 	const registration = options.registration ?? new FeishuRegistrationClient();
 	const bindings = options.bindings ?? new MessageBindingStore();
+	const notifyStore = new NotifyStore();
 	const allowed = new Set(options.allowedOpenIds ?? []);
 	let hubConfigSnapshot = options.hubConfig;
 
@@ -228,44 +230,54 @@ export async function startHubServer(options: HubServerOptions = {}): Promise<Hu
 		);
 
 		try {
-			// 审批：先入状态机，再出站卡片
-			if (m.event === "approval") {
-				approvals.create({
-					requestId: m.requestId,
-					piId: m.piId,
-					timeoutMs: m.timeoutMs,
-					title: m.title,
-					body: m.body,
-				});
-			}
-
-			const outbound = {
+			const payload = {
+				piId: m.piId,
+				requestId: m.requestId,
+				event: m.event,
 				title: m.title,
 				body: m.body,
-				piId: m.piId,
-				event: m.event,
-				requestId: m.requestId,
 				actions: m.actions,
+				timeoutMs: m.timeoutMs,
 			};
 
-			let messageId: string;
-			if (m.event === "approval" && feishu.sendApprovalCard) {
-				const result = await feishu.sendApprovalCard(outbound);
-				messageId = result.messageId;
-			} else {
-				const result = await feishu.send(outbound);
-				messageId = result.messageId;
-			}
+			const { messageId, reused } = await notifyStore.sendIdempotent(payload, async () => {
+				// 审批：先入状态机，再出站卡片（仅首次真正发送时）
+				if (m.event === "approval") {
+					approvals.create({
+						requestId: m.requestId,
+						piId: m.piId,
+						timeoutMs: m.timeoutMs,
+						title: m.title,
+						body: m.body,
+					});
+				}
 
-			if (m.event === "approval") {
-				approvals.setMessageId(m.requestId, messageId);
-			}
+				const outbound = {
+					title: m.title,
+					body: m.body,
+					piId: m.piId,
+					event: m.event,
+					requestId: m.requestId,
+					actions: m.actions,
+				};
 
-			bindings.bind({
-				messageId,
-				piId: m.piId,
-				requestId: m.requestId,
-				event: m.event,
+				const result =
+					m.event === "approval" && feishu.sendApprovalCard
+						? await feishu.sendApprovalCard(outbound)
+						: await feishu.send(outbound);
+
+				if (m.event === "approval") {
+					approvals.setMessageId(m.requestId, result.messageId);
+				}
+
+				bindings.bind({
+					messageId: result.messageId,
+					piId: m.piId,
+					requestId: m.requestId,
+					event: m.event,
+				});
+
+				return result.messageId;
 			});
 
 			safeSend(client.socket, {
@@ -274,7 +286,7 @@ export async function startHubServer(options: HubServerOptions = {}): Promise<Hu
 				messageId,
 			});
 			log(
-				`[hub] notify_ack piId=${m.piId} requestId=${m.requestId} messageId=${messageId}`,
+				`[hub] notify_ack piId=${m.piId} requestId=${m.requestId} messageId=${messageId}${reused ? " reused" : ""}`,
 			);
 		} catch (error) {
 			const message = error instanceof Error ? error.message : String(error);
@@ -678,6 +690,7 @@ export async function startHubServer(options: HubServerOptions = {}): Promise<Hu
 			try { nativeRuntimeStop?.(); } catch { /* ignore */ }
 			registry.stopSweeper();
 			approvals.clear();
+			notifyStore.clear();
 			for (const client of clients.values()) {
 				try {
 					client.socket.close(1001, "hub shutdown");

@@ -37,9 +37,9 @@ Hub features 必须包含 `lark_open` 与 `lark_reset`。
 
 ## 出站
 
-- 全部 `notify` 出站优先 `msg_type=interactive` 卡片 Markdown（header=title，elements markdown=body）；失败降级 `msg_type=text`。
-- 绑定使用最终成功发送的 `message_id`（卡片成功用卡片 id，降级 text 用 text id）。
-- 超长正文单条截断并追加 `…（已截断）`，不拆多条。
+- 全部 `notify` 出站优先 `msg_type=interactive` 卡片 Markdown（header=title，elements 为按组件限制分段的 markdown）；失败降级 `msg_type=text`。
+- 长正文在同一张卡片内分段；若超过飞书消息体限制，则顺序发送多张带“第 i/N 部分”标题的卡片。纯文本降级同样分批，正文不得静默截断。
+- 绑定使用全部批次成功后第一条消息的真实 `message_id`（卡片成功用首条卡片 id，降级 text 用首条 text id）。
 
 ## 路由
 

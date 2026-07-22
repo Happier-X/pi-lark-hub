@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { NativeFeishuTransport, NativeFeishuWsInbound } from "./feishu-native.js";
-import { TRUNCATE_SUFFIX } from "./feishu-outbound-format.js";
 
 const credentials = { appId: "cli_x", appSecret: "secret", brand: "feishu" as const, updatedAt: 1 };
 
@@ -58,16 +57,16 @@ describe("NativeFeishuTransport", () => {
 		assert.equal(card.elements[0]!.content, body);
 	});
 
-	it("超长 body 在卡片中截断", async () => {
-		let input: any;
+	it("超长 body 分成多个卡片且完整发送", async () => {
+		const inputs: any[] = [];
 		const t = new NativeFeishuTransport(credentials, {
 			userId: "ou_owner",
 			client: {
 				im: {
 					message: {
 						create: async (v: unknown) => {
-							input = v;
-							return { data: { message_id: "om_long" } };
+							inputs.push(v);
+							return { data: { message_id: `om_long_${inputs.length}` } };
 						},
 					},
 				},
@@ -75,9 +74,32 @@ describe("NativeFeishuTransport", () => {
 		});
 		const body = "x".repeat(5000);
 		await t.send({ title: "长", body });
-		const card = JSON.parse(input.data.content) as { elements: Array<{ content: string }> };
-		assert.ok(card.elements[0]!.content.length <= 3500);
-		assert.ok(card.elements[0]!.content.endsWith(TRUNCATE_SUFFIX));
+		const cards = inputs.map((input) => JSON.parse(input.data.content) as { elements: Array<{ content: string }> });
+		assert.ok(cards.some((card) => card.elements.length > 1));
+
+		inputs.length = 0;
+		const manyBody = "x".repeat(3000 * 11);
+		await t.send({ title: "长", body: manyBody });
+		assert.ok(inputs.length > 1);
+		const manyCards = inputs.map((input) => JSON.parse(input.data.content) as { elements: Array<{ content: string }> });
+		assert.equal(manyCards.flatMap((card) => card.elements.map((element) => element.content)).join(""), manyBody);
+		assert.equal(cards.flatMap((card) => card.elements.map((element) => element.content)).join(""), body);
+	});
+
+	it("多卡片中途失败时不重复降级", async () => {
+		let calls = 0;
+		const t = new NativeFeishuTransport(credentials, {
+			userId: "ou_owner",
+			client: {
+				im: { message: { create: async () => {
+					calls += 1;
+					if (calls === 2) throw new Error("second card boom");
+					return { data: { message_id: `om_${calls}` } };
+				} } },
+			},
+		});
+		await assert.rejects(() => t.send({ title: "长", body: "x".repeat(3000 * 11) }), /分批发送失败/);
+		assert.equal(calls, 2);
 	});
 
 	it("卡片失败时降级 text 并返回 text 的 message_id", async () => {

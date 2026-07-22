@@ -40,7 +40,7 @@
 
 ## 出站渲染
 
-任务结束、审批等 `notify` 统一经 `NativeFeishuTransport.send`：优先发送 `msg_type=interactive` 卡片（header 放 title，body 用 markdown 模块渲染表格/代码块/列表），失败自动降级 `msg_type=text`；绑定使用最终成功的 `message_id`。超长正文在出站层单条截断并追加「…（已截断）」。
+任务结束、审批等 `notify` 统一经 `NativeFeishuTransport.send`：优先发送 `msg_type=interactive` 卡片（header 放 title，body 用多个 markdown 模块渲染表格/代码块/列表），失败自动降级 `msg_type=text`；长正文在同一卡片内分段，超过单卡消息体限制时顺序拆成多张带“第 i/N 部分”标识的卡片，纯文本降级同样分批且不静默丢失正文；绑定使用全部批次成功后的首条真实 `message_id`。
 
 ## 协议
 

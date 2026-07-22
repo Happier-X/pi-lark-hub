@@ -4,6 +4,8 @@ import {
 	CARD_MARKDOWN_MAX,
 	TEXT_FALLBACK_MAX,
 	TRUNCATE_SUFFIX,
+	buildInteractiveCardContents,
+	buildPlainTextContents,
 	buildInteractiveCardContent,
 	buildPlainTextContent,
 	templateForEvent,
@@ -64,6 +66,13 @@ describe("buildInteractiveCardContent", () => {
 		assert.equal(card.elements[0]!.content, "（无正文）");
 	});
 
+	it("emoji 分段不拆代理对", () => {
+		const body = "a".repeat(CARD_MARKDOWN_MAX - 1) + "😀";
+		const cards = buildInteractiveCardContents("t", body, { maxLength: CARD_MARKDOWN_MAX });
+		assert.equal(cards.map((raw) => (JSON.parse(raw) as { elements: Array<{ content: string }> }).elements.map((element) => element.content).join("")).join(""), body);
+		assert.doesNotMatch(cards[0]!, /�/);
+	});
+
 	it("表格与代码块原样进入 markdown，不做二次改写", () => {
 		const body = [
 			"| a | b |",
@@ -82,14 +91,20 @@ describe("buildInteractiveCardContent", () => {
 		assert.equal(card.elements[0]!.content, body);
 	});
 
-	it("超长 body 截断且不超过上限", () => {
+	it("卡片正文无法容纳时抛出错误", () => {
+		assert.throws(() => buildInteractiveCardContents("标题", "正文", { maxBytes: 1 }), /超过消息体限制/);
+	});
+
+	it("超长 body 分段且拼接后完整", () => {
 		const body = "字".repeat(CARD_MARKDOWN_MAX + 200);
-		const card = JSON.parse(buildInteractiveCardContent("t", body)) as {
-			elements: Array<{ content: string }>;
-		};
-		const content = card.elements[0]!.content;
-		assert.ok(content.length <= CARD_MARKDOWN_MAX);
-		assert.ok(content.endsWith(TRUNCATE_SUFFIX));
+		const contents = buildInteractiveCardContents("t", body);
+		const cards = contents.map((content) => JSON.parse(content) as { elements: Array<{ content: string }> });
+		assert.equal(cards.flatMap((card) => card.elements.map((element) => element.content)).join(""), body);
+		assert.ok(cards.every((card) => card.elements.every((element) => element.content.length <= CARD_MARKDOWN_MAX)));
+		assert.ok(cards.some((card) => card.elements.length > 1));
+
+		const manyBody = "字".repeat(CARD_MARKDOWN_MAX * 11);
+		assert.ok(buildInteractiveCardContents("t", manyBody).length > 1);
 	});
 });
 
@@ -104,10 +119,10 @@ describe("buildPlainTextContent", () => {
 		assert.equal(parsed.text, "only");
 	});
 
-	it("超长截断", () => {
+	it("超长正文分批且完整", () => {
 		const body = "b".repeat(TEXT_FALLBACK_MAX + 50);
-		const parsed = JSON.parse(buildPlainTextContent("t", body)) as { text: string };
-		assert.ok(parsed.text.length <= TEXT_FALLBACK_MAX);
-		assert.ok(parsed.text.endsWith(TRUNCATE_SUFFIX));
+		const parts = buildPlainTextContents("t", body).map((raw) => (JSON.parse(raw) as { text: string }).text);
+		assert.ok(parts.length > 1);
+		assert.equal(parts.join("").replace(/（第 \d+\/\d+ 部分）\n/g, ""), `t\n${body}`);
 	});
 });

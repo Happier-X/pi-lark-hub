@@ -3,8 +3,8 @@ import type { FeishuCredentials } from "./credentials.js";
 import type { InboundControlHandlers } from "./feishu-native-inbound.js";
 import { parseInboundEvent } from "./feishu-native-inbound.js";
 import {
-	buildInteractiveCardContent,
-	buildPlainTextContent,
+	buildInteractiveCardContents,
+	buildPlainTextContents,
 	templateForEvent,
 } from "./feishu-outbound-format.js";
 import type { FeishuOutboundMessage, FeishuSendResult, FeishuTransport } from "./feishu-transport.js";
@@ -71,40 +71,43 @@ export class NativeFeishuTransport implements FeishuTransport {
 			data: { receive_id: receiveId },
 		};
 
-		const cardContent = buildInteractiveCardContent(message.title, message.body, {
+		const cardContents = buildInteractiveCardContents(message.title, message.body, {
 			template: templateForEvent(message.event),
 		});
 
 		try {
-			const r = await this.client.im.message.create({
-				...base,
-				data: {
-					...base.data,
-					msg_type: "interactive",
-					content: cardContent,
-				},
-			});
-			const id = extractMessageId(r);
-			if (!id) throw new Error("响应缺少 message_id");
-			return { messageId: id };
-		} catch (cardError) {
-			const cardReason = errorMessage(cardError, this.credentials.appSecret);
-			// 不回显 secret；仅摘要卡片失败原因
-			console.log(`[feishu-native] 卡片发送失败，降级纯文本：${cardReason}`);
-
-			try {
-				const textContent = buildPlainTextContent(message.title, message.body);
+			let firstId: string | undefined;
+			for (const content of cardContents) {
 				const r = await this.client.im.message.create({
 					...base,
-					data: {
-						...base.data,
-						msg_type: "text",
-						content: textContent,
-					},
+					data: { ...base.data, msg_type: "interactive", content },
 				});
 				const id = extractMessageId(r);
 				if (!id) throw new Error("响应缺少 message_id");
-				return { messageId: id };
+				firstId ??= id;
+			}
+			return { messageId: firstId! };
+		} catch (cardError) {
+			const cardReason = errorMessage(cardError, this.credentials.appSecret);
+			// 分批卡片只有首批失败时才可安全降级，避免部分卡片后重复发送完整正文。
+			if (cardContents.length > 1) {
+				throw new Error(`原生飞书卡片分批发送失败：${cardReason}`);
+			}
+			console.log(`[feishu-native] 卡片发送失败，降级纯文本：${cardReason}`);
+
+			try {
+				const textContents = buildPlainTextContents(message.title, message.body);
+				let firstId: string | undefined;
+				for (const content of textContents) {
+					const r = await this.client.im.message.create({
+						...base,
+						data: { ...base.data, msg_type: "text", content },
+					});
+					const id = extractMessageId(r);
+					if (!id) throw new Error("响应缺少 message_id");
+					firstId ??= id;
+				}
+				return { messageId: firstId! };
 			} catch (textError) {
 				const textReason = errorMessage(textError, this.credentials.appSecret);
 				throw new Error(

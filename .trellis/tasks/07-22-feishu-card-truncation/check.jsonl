@@ -1,0 +1,4 @@
+{"file":".trellis/spec/backend/quality-guidelines.md","reason":"检查错误处理、用户可见反馈和类型检查要求。"}
+{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"检查 Pi→Hub→Feishu 的跨层数据流、边界和完整性。"}
+{"file":"docs/lark-hub.md","reason":"核对实现与出站卡片文档合约的一致性。"}
+{"file":"package.json","reason":"确认项目标准验证命令 npm run typecheck 与 npm test。"}

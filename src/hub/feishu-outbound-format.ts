@@ -3,88 +3,152 @@
  * 纯函数，不依赖 SDK / 网络。
  */
 
-/** markdown content 安全上限（留余量给 header） */
-export const CARD_MARKDOWN_MAX = 3500;
+/** 单个 markdown 元素的保守正文上限。 */
+export const CARD_MARKDOWN_MAX = 3000;
+/** 卡片消息体最大 30 KB；预留结构和编码余量。 */
+export const CARD_MESSAGE_MAX_BYTES = 30 * 1024 - 1024;
+/** 单张卡片最多放置的 markdown 元素数。 */
+export const CARD_MAX_MARKDOWN_ELEMENTS = 10;
+/** 文本消息官方上限为 150 KB，这里预留 JSON 结构余量。 */
+export const TEXT_FALLBACK_MAX = 140 * 1024;
 
-/** 降级 text 同样截断 */
-export const TEXT_FALLBACK_MAX = 3500;
-
-/** 截断后缀（固定，便于断言） */
+/** 兼容旧调用方；新的分段逻辑不再使用截断后缀。 */
 export const TRUNCATE_SUFFIX = "\n…（已截断）";
 
 export type CardTemplate = "blue" | "green" | "orange" | "red" | "purple" | "indigo" | "turquoise" | "wathet" | "yellow" | "grey";
 
 export type BuildInteractiveCardOptions = {
-	/** 飞书 header template；可由 event 映射 */
 	template?: CardTemplate;
-	/** markdown 正文上限，默认 CARD_MARKDOWN_MAX */
 	maxLength?: number;
 };
 
-/**
- * 将 event 映射为卡片 header 颜色。
- * task_end → green；approval → orange；其他 → blue。
- */
+export type CardContentOptions = BuildInteractiveCardOptions & {
+	maxBytes?: number;
+	maxElements?: number;
+};
+
 export function templateForEvent(event?: string): CardTemplate {
 	if (event === "task_end") return "green";
 	if (event === "approval") return "orange";
 	return "blue";
 }
 
-/**
- * 按 JS string length 截断，超限时追加固定后缀。
- * 保证结果长度 ≤ max，且后缀完整（max 过小时仍只返回后缀的前 max 字符，避免无限）。
- */
+/** 旧接口保留给外部调用方；内部新路径使用分段函数保证完整性。 */
 export function truncateForFeishu(text: string, max: number): string {
 	if (max <= 0) return "";
 	if (text.length <= max) return text;
-	const suffix = TRUNCATE_SUFFIX;
-	if (max <= suffix.length) return suffix.slice(0, max);
-	return text.slice(0, max - suffix.length) + suffix;
+	if (max <= TRUNCATE_SUFFIX.length) return TRUNCATE_SUFFIX.slice(0, max);
+	return text.slice(0, max - TRUNCATE_SUFFIX.length) + TRUNCATE_SUFFIX;
 }
 
-/**
- * 构建 interactive 卡片 content（JSON 字符串）。
- * - title 空 → header 用「通知」
- * - body 空 → markdown 用「（无正文）」
- * - body 不做二次 Markdown 改写，原样进入 content
- */
-export function buildInteractiveCardContent(
-	title: string | undefined,
-	body: string,
-	options: BuildInteractiveCardOptions = {},
-): string {
-	const maxLength = options.maxLength ?? CARD_MARKDOWN_MAX;
-	const template = options.template ?? "blue";
-	const headerTitle = title?.trim() ? title.trim() : "通知";
-	const rawBody = body?.trim() ? body : "（无正文）";
-	const markdown = truncateForFeishu(rawBody, maxLength);
+function splitText(text: string, maxLength: number): string[] {
+	if (maxLength <= 0) throw new Error("正文分段上限必须大于 0");
+	const units = Array.from(text);
+	if (units.length <= maxLength) return [text];
+	const parts: string[] = [];
+	let offset = 0;
+	while (units.length - offset > maxLength) {
+		const window = units.slice(offset, offset + maxLength + 1).join("");
+		const newline = window.lastIndexOf("\n");
+		const count = Array.from(newline > 0 ? window.slice(0, newline + 1) : window.slice(0, maxLength)).length;
+		parts.push(units.slice(offset, offset + count).join(""));
+		offset += count;
+	}
+	if (offset < units.length) parts.push(units.slice(offset).join(""));
+	return parts;
+}
 
-	return JSON.stringify({
+function splitTextByBytes(text: string, maxBytes: number): string[] {
+	if (maxBytes <= 0) throw new Error("正文字节分段上限必须大于 0");
+	if (Buffer.byteLength(text, "utf8") <= maxBytes) return [text];
+	const parts: string[] = [];
+	let remaining = text;
+	while (Buffer.byteLength(remaining, "utf8") > maxBytes) {
+		const units = Array.from(remaining);
+		let low = 1;
+		let high = Math.min(units.length, maxBytes);
+		while (low < high) {
+			const middle = Math.ceil((low + high) / 2);
+			if (Buffer.byteLength(units.slice(0, middle).join(""), "utf8") <= maxBytes) low = middle;
+			else high = middle - 1;
+		}
+		const window = units.slice(0, low + 1).join("");
+		const newline = window.lastIndexOf("\n");
+		const candidate = newline > 0 ? window.slice(0, newline + 1) : units.slice(0, low).join("");
+		const cut = Array.from(candidate).length;
+		if (cut <= 0) throw new Error("无法按 UTF-8 字节限制切分正文");
+		parts.push(units.slice(0, cut).join(""));
+		remaining = units.slice(cut).join("");
+	}
+	if (remaining.length > 0) parts.push(remaining);
+	return parts;
+}
+
+function headerTitle(title: string | undefined, part: number, total: number): string {
+	const base = title?.trim() || "通知";
+	return total > 1 ? `${base}（第 ${part}/${total} 部分）` : base;
+}
+
+function cardObject(title: string, parts: string[], template: CardTemplate) {
+	return {
 		config: { wide_screen_mode: true },
-		header: {
-			title: { tag: "plain_text", content: headerTitle },
-			template,
-		},
-		elements: [
-			{
-				tag: "markdown",
-				content: markdown,
-			},
-		],
-	});
+		header: { title: { tag: "plain_text", content: title }, template },
+		elements: parts.map((content) => ({ tag: "markdown", content })),
+	};
 }
 
-/**
- * 构建 text 消息 content（JSON 字符串）。
- * title + body 用换行拼接；超长截断。
- */
-export function buildPlainTextContent(
+/** 将正文按 Markdown 元素和卡片字节上限分组，不丢弃任何字符。 */
+export function buildInteractiveCardContents(
 	title: string | undefined,
 	body: string,
-	maxLength: number = TEXT_FALLBACK_MAX,
-): string {
-	const text = [title, body].filter((part) => part != null && String(part).length > 0).join("\n");
-	const truncated = truncateForFeishu(text || "（无正文）", maxLength);
-	return JSON.stringify({ text: truncated });
+	eventOrOptions: CardTemplate | CardContentOptions = {},
+): string[] {
+	const options = typeof eventOrOptions === "string" ? { template: eventOrOptions } : eventOrOptions;
+	const maxLength = options.maxLength ?? CARD_MARKDOWN_MAX;
+	const maxBytes = options.maxBytes ?? CARD_MESSAGE_MAX_BYTES;
+	const maxElements = options.maxElements ?? CARD_MAX_MARKDOWN_ELEMENTS;
+	const rawBody = body?.trim() ? body : "（无正文）";
+	const chunks = splitText(rawBody, maxLength);
+	const groups: string[][] = [];
+	for (const chunk of chunks) {
+		const current = groups.at(-1) ?? [];
+		const candidate = [...current, chunk];
+		const total = Math.ceil(chunks.length / Math.max(1, maxElements));
+		const titleText = headerTitle(title, groups.length + 1, total);
+		const candidateCard = JSON.stringify(cardObject(titleText, candidate, options.template ?? "blue"));
+		if (current.length > 0 && (current.length >= maxElements || Buffer.byteLength(candidateCard, "utf8") > maxBytes)) {
+			groups.push([chunk]);
+		} else if (current.length === 0 && Buffer.byteLength(candidateCard, "utf8") > maxBytes && chunk.length > 1) {
+			// 极端长标题/编码开销：降低本片段上限后重试，仍不截断正文。
+			return buildInteractiveCardContents(title, body, { ...options, maxLength: Math.max(1, Math.floor(maxLength / 2)) });
+		} else if (groups.length === 0 && Buffer.byteLength(candidateCard, "utf8") > maxBytes) {
+			throw new Error("飞书卡片标题或结构超过消息体限制");
+		} else {
+			if (groups.length === 0) groups.push([]);
+			groups[groups.length - 1]!.push(chunk);
+		}
+	}
+	const total = groups.length;
+	const contents = groups.map((parts, index) => JSON.stringify(cardObject(headerTitle(title, index + 1, total), parts, options.template ?? "blue")));
+	if (contents.some((content) => Buffer.byteLength(content, "utf8") > maxBytes)) {
+		throw new Error("飞书卡片消息体超过限制");
+	}
+	return contents;
+}
+
+export function buildInteractiveCardContent(title: string | undefined, body: string, options: BuildInteractiveCardOptions = {}): string {
+	const contents = buildInteractiveCardContents(title, body, options);
+	if (contents.length !== 1) throw new Error("正文过长，请使用 buildInteractiveCardContents");
+	return contents[0]!;
+}
+
+/** 将纯文本按消息体限制分批，保证拼接后正文完整。 */
+export function buildPlainTextContents(title: string | undefined, body: string, maxLength = TEXT_FALLBACK_MAX): string[] {
+	const text = [title, body].filter((part) => part != null && String(part).length > 0).join("\n") || "（无正文）";
+	const chunks = splitTextByBytes(text, Math.max(1, maxLength - 128));
+	return chunks.map((chunk, index) => JSON.stringify({ text: chunks.length > 1 ? `（第 ${index + 1}/${chunks.length} 部分）\n${chunk}` : chunk }));
+}
+
+export function buildPlainTextContent(title: string | undefined, body: string, maxLength = TEXT_FALLBACK_MAX): string {
+	return buildPlainTextContents(title, body, maxLength)[0]!;
 }

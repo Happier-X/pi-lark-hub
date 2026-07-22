@@ -1,0 +1,5 @@
+{"file":".trellis/spec/backend/multi-pi-lark-hub.md","reason":"出站消息、message_id 绑定和审批路由合约；实现需保持协议兼容并更新超长正文规则。"}
+{"file":"src/hub/feishu-outbound-format.ts","reason":"当前卡片/文本截断逻辑的唯一格式层，需要扩展为分段和字节预算。"}
+{"file":"src/hub/feishu-native.ts","reason":"真实飞书 API 顺序发送卡片批次及完整文本降级的 transport 实现位置。"}
+{"file":"src/hub/feishu-outbound-format.test.ts","reason":"格式层现有回归测试和新增长正文切分测试入口。"}
+{"file":"src/hub/feishu-native.test.ts","reason":"transport 发送、降级、message_id 和长正文回归测试入口。"}

@@ -22,6 +22,11 @@
 - 飞书：`队列` / `取消 <id>` / `清空队列`
 - Pi：`/lark queue` · `/lark cancel <id>` · `/lark clear-queue`
 
+## 运行时状态
+
+- 未决审批与消息绑定落盘到 `~/.pi/lark-hub/state.json`（`PI_LARK_HUB_STATE` 可覆盖），原子写入；Hub 启动时恢复并重武装超时。
+- `/lark reset` 会清空内存状态并删除该文件。损坏文件不阻塞启动。
+
 通知历史（内存，TTL/容量限制）：
 
 - `GET /notifications` 返回 `records`（状态、messageIds、脱敏 error），无完整 body。

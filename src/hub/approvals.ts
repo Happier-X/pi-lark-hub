@@ -305,6 +305,64 @@ export class ApprovalStore {
 		};
 	}
 
+	/** 可落盘记录：pending / failed_delivery 且未 delivered */
+	exportPersistable(): ApprovalRecord[] {
+		return this.list().filter(
+			(r) =>
+				(r.status === "pending" || r.status === "failed_delivery") &&
+				!r.deliveredToPi,
+		);
+	}
+
+	/**
+	 * 从持久化恢复：写入记录并为 pending 重武装超时。
+	 * remaining = createdAt+timeoutMs-now；≤0 时立即 onTimeoutFire（或 applyTimeout）。
+	 */
+	restoreFromPersisted(records: ApprovalRecord[]): number {
+		let n = 0;
+		const now = this.now();
+		for (const raw of records) {
+			const requestId = raw.requestId?.trim();
+			if (!requestId || !raw.piId?.trim()) continue;
+			if (this.records.has(requestId)) continue;
+			const status = raw.status;
+			if (status !== "pending" && status !== "failed_delivery") continue;
+			if (raw.deliveredToPi) continue;
+
+			const record: ApprovalRecord = {
+				requestId,
+				piId: raw.piId.trim(),
+				status,
+				createdAt: raw.createdAt,
+				timeoutMs: raw.timeoutMs > 0 ? raw.timeoutMs : this.defaultTimeoutMs,
+				deliveredToPi: false,
+			};
+			if (raw.decision === "approve" || raw.decision === "reject") {
+				record.decision = raw.decision;
+			}
+			if (raw.messageId) record.messageId = raw.messageId;
+			if (raw.title !== undefined) record.title = raw.title;
+			if (raw.body !== undefined) record.body = raw.body;
+			if (raw.actorOpenId) record.actorOpenId = raw.actorOpenId;
+
+			this.records.set(requestId, record);
+			n++;
+
+			if (status === "pending") {
+				const deadline = record.createdAt + record.timeoutMs;
+				const remaining = deadline - now;
+				if (remaining <= 0) {
+					// 过期：立即走超时回调路径
+					if (this.onTimeoutFire) this.onTimeoutFire(requestId);
+					else this.applyTimeout(requestId, () => true);
+				} else {
+					this.armTimeout(requestId, remaining);
+				}
+			}
+		}
+		return n;
+	}
+
 	/** 测试/关闭：清理全部定时器与记录 */
 	clear(): void {
 		for (const id of [...this.timers.keys()]) {

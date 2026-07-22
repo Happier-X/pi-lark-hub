@@ -1,0 +1,4 @@
+{"file":"src/hub/approvals.ts","reason":"审批状态机"}
+{"file":"src/hub/bindings.ts","reason":"绑定"}
+{"file":"src/hub/atomic-file.ts","reason":"原子写"}
+{"file":"src/hub/server.ts","reason":"生命周期"}

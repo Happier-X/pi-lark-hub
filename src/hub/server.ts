@@ -39,6 +39,13 @@ import {
 import { NotifyStore, type NotifyPayload } from "./notify-store.js";
 import { DEFAULT_HEARTBEAT_TIMEOUT_MS, InstanceRegistry } from "./registry.js";
 import type { HubStatusSnapshot } from "./status-report.js";
+import {
+	clearHubStateFile,
+	createDebouncedPersist,
+	defaultStatePath,
+	loadHubState,
+	saveHubState,
+} from "./state-persist.js";
 
 export const DEFAULT_HUB_PORT = 8765;
 export const DEFAULT_HUB_HOST = "127.0.0.1";
@@ -66,6 +73,10 @@ export type HubServerOptions = {
 	hubConfig?: HubConfig;
 	/** 覆盖控制面 token（优先于 hubConfig.control.token） */
 	controlToken?: string;
+	/** 审批/绑定状态文件；默认 ~/.pi/lark-hub/state.json */
+	stateFile?: string;
+	/** 关闭状态持久化（测试） */
+	disableStatePersist?: boolean;
 	log?: (line: string) => void;
 	/** 扫码注册客户端（测试可注入） */
 	registration?: FeishuRegistrationClient;
@@ -133,6 +144,26 @@ export async function startHubServer(options: HubServerOptions = {}): Promise<Hu
 	const notifyStore = new NotifyStore();
 	const allowed = new Set(options.allowedOpenIds ?? []);
 	let hubConfigSnapshot = options.hubConfig;
+	const stateFile = options.disableStatePersist
+		? undefined
+		: (options.stateFile ?? defaultStatePath());
+	const writeState = () => {
+		if (!stateFile) return;
+		try {
+			saveHubState(stateFile, {
+				approvals: approvalsRef.exportPersistable(),
+				bindings: bindings.list(),
+			});
+		} catch (error) {
+			log(
+				`[hub] 状态落盘失败：${error instanceof Error ? error.message : String(error)}`,
+			);
+		}
+	};
+	const statePersist = stateFile
+		? createDebouncedPersist(writeState, { delayMs: 300 })
+		: null;
+	const schedulePersist = () => statePersist?.schedule();
 	const controlCfg = {
 		token: options.controlToken ?? options.hubConfig?.control?.token,
 		bodyMaxBytes: options.hubConfig?.control?.bodyMaxBytes ?? 64 * 1024,
@@ -200,6 +231,7 @@ export async function startHubServer(options: HubServerOptions = {}): Promise<Hu
 		} else {
 			// 不 markDelivered，标 failed 以便 Pi 恢复后可重试；绝不改投其他实例
 			approvalsRef.markFailedDelivery(input.requestId);
+			schedulePersist();
 			log(
 				`[hub] approval_result 投递失败（连接不可用）piId=${input.piId} requestId=${input.requestId}`,
 			);
@@ -210,6 +242,7 @@ export async function startHubServer(options: HubServerOptions = {}): Promise<Hu
 	const handleApprovalTimeout = (requestId: string) => {
 		const result = approvalsRef.applyTimeout(requestId, isPiSocketOnline);
 		if (result.kind !== "timed_out") return;
+		schedulePersist();
 		log(
 			`[hub] approval timeout requestId=${requestId} piId=${result.record.piId} offline=${result.offline}`,
 		);
@@ -229,6 +262,19 @@ export async function startHubServer(options: HubServerOptions = {}): Promise<Hu
 			onTimeoutFire: handleApprovalTimeout,
 		});
 	approvalsRef = approvals;
+
+	if (stateFile) {
+		const loaded = loadHubState(stateFile);
+		if (loaded === null) {
+			log(`[hub] 状态文件损坏或版本不兼容，忽略：${stateFile}`);
+		} else if (loaded.approvals.length > 0 || loaded.bindings.length > 0) {
+			const nb = bindings.restoreFromPersisted(loaded.bindings);
+			const na = approvals.restoreFromPersisted(loaded.approvals);
+			log(
+				`[hub] 已恢复状态 approvals=${na} bindings=${nb} from ${stateFile}`,
+			);
+		}
+	}
 
 	const getStatusSnapshot = (): HubStatusSnapshot => {
 		const creds = loadCredentials(options.credentialsFile ?? credentialsPath());
@@ -301,6 +347,7 @@ export async function startHubServer(options: HubServerOptions = {}): Promise<Hu
 				});
 			}
 
+			schedulePersist();
 			return { messageId: result.messageId, messageIds };
 		});
 	};
@@ -563,6 +610,7 @@ export async function startHubServer(options: HubServerOptions = {}): Promise<Hu
 					return;
 				}
 				approvals.markDelivered(m.requestId);
+				schedulePersist();
 				log(
 					`[hub] approval_result_ack piId=${m.piId} requestId=${m.requestId}`,
 				);
@@ -589,7 +637,57 @@ export async function startHubServer(options: HubServerOptions = {}): Promise<Hu
 				return;
 			}
 			case "lark_open": { const m = msg as Extract<PiToHubMessage, { type: "lark_open" }>; if (!client.piId || m.piId !== client.piId) { safeSend(client.socket, { type: "error", message: "lark 操作失败：piId 不一致" }); return; } if (!setupTask) setupTask = handleSetup(client).finally(() => { setupTask = null; }); else safeSend(client.socket, { type: "error", message: "已有扫码开局正在进行，请等待其结束" }); return; }
-			case "lark_reset": { const m = msg as Extract<PiToHubMessage, { type: "lark_reset" }>; if (!client.piId || m.piId !== client.piId) { safeSend(client.socket, { type: "error", message: "lark reset 失败：piId 不一致" }); return; } void (async () => { try { setupAbort?.abort(); await setupTask; nativeRuntimeStop?.(); nativeRuntimeStop = undefined; deleteCredentials(options.credentialsFile ?? credentialsPath()); resetNativeConfig({ configPath: hubConfigSnapshot?.configPath, base: hubConfigSnapshot }); allowed.clear(); hubConfigSnapshot = undefined; feishu = new NoopFeishuTransport(); hub.feishu = feishu; safeSend(client.socket, { type: "lark_result", ok: true, connected: false, reset: true, message: "飞书原生凭证、配置和主人绑定已清理" }); } catch (e) { safeSend(client.socket, { type: "lark_result", ok: false, connected: false, reset: true, message: e instanceof Error ? e.message : String(e) }); } })(); return; }
+			case "lark_reset": {
+				const m = msg as Extract<PiToHubMessage, { type: "lark_reset" }>;
+				if (!client.piId || m.piId !== client.piId) {
+					safeSend(client.socket, { type: "error", message: "lark reset 失败：piId 不一致" });
+					return;
+				}
+				void (async () => {
+					try {
+						setupAbort?.abort();
+						await setupTask;
+						nativeRuntimeStop?.();
+						nativeRuntimeStop = undefined;
+						deleteCredentials(options.credentialsFile ?? credentialsPath());
+						resetNativeConfig({
+							configPath: hubConfigSnapshot?.configPath,
+							base: hubConfigSnapshot,
+						});
+						allowed.clear();
+						hubConfigSnapshot = undefined;
+						feishu = new NoopFeishuTransport();
+						hub.feishu = feishu;
+						approvals.clear();
+						bindings.clear();
+						notifyStore.clear();
+						if (stateFile) {
+							statePersist?.cancel();
+							try {
+								clearHubStateFile(stateFile);
+							} catch {
+								/* ignore */
+							}
+						}
+						safeSend(client.socket, {
+							type: "lark_result",
+							ok: true,
+							connected: false,
+							reset: true,
+							message: "飞书原生凭证、配置和主人绑定已清理",
+						});
+					} catch (e) {
+						safeSend(client.socket, {
+							type: "lark_result",
+							ok: false,
+							connected: false,
+							reset: true,
+							message: e instanceof Error ? e.message : String(e),
+						});
+					}
+				})();
+				return;
+			}
 			default:
 				safeSend(client.socket, {
 					type: "error",
@@ -896,6 +994,11 @@ export async function startHubServer(options: HubServerOptions = {}): Promise<Hu
 		handleInboundApproval: applyInboundApproval,
 		close: async () => {
 			setupAbort?.abort();
+			try {
+				statePersist?.flush();
+			} catch {
+				/* ignore */
+			}
 			try { nativeRuntimeStop?.(); } catch { /* ignore */ }
 			registry.stopSweeper();
 			approvals.clear();
@@ -1038,6 +1141,7 @@ export async function startHubServer(options: HubServerOptions = {}): Promise<Hu
 			decision: input.decision,
 			openId: input.openId,
 		});
+		schedulePersist();
 
 		let delivered = false;
 		if (result.approvalDeliver) {

@@ -92,6 +92,26 @@ export class MessageBindingStore {
 		this.bindings.clear();
 	}
 
+	/** 批量恢复（跳过过期） */
+	restoreFromPersisted(items: MessageBinding[], now = Date.now()): number {
+		let n = 0;
+		for (const item of items) {
+			const messageId = item.messageId?.trim();
+			if (!messageId || !item.piId?.trim()) continue;
+			const binding: MessageBinding = {
+				messageId,
+				piId: item.piId.trim(),
+				requestId: item.requestId,
+				event: item.event,
+				createdAt: item.createdAt,
+			};
+			if (this.isExpired(binding, now)) continue;
+			this.bindings.set(messageId, binding);
+			n++;
+		}
+		return n;
+	}
+
 	private isExpired(binding: MessageBinding, now: number): boolean {
 		if (this.ttlMs <= 0) return false;
 		return now - binding.createdAt > this.ttlMs;

@@ -499,6 +499,37 @@ describe("reply routing via handleControlMessage", () => {
 });
 
 describe("ApprovalStore", () => {
+	it("restoreFromPersisted 重武装剩余超时", () => {
+		const fired: string[] = [];
+		let now = 10_000;
+		const store = new ApprovalStore({
+			defaultTimeoutMs: 60_000,
+			now: () => now,
+			onTimeoutFire: (id) => fired.push(id),
+		});
+		const n = store.restoreFromPersisted([
+			{
+				requestId: "old",
+				piId: "a1",
+				status: "pending",
+				createdAt: 0,
+				timeoutMs: 5_000,
+				deliveredToPi: false,
+			},
+			{
+				requestId: "fresh",
+				piId: "a1",
+				status: "pending",
+				createdAt: 9_000,
+				timeoutMs: 60_000,
+				deliveredToPi: false,
+			},
+		]);
+		assert.equal(n, 2);
+		assert.deepEqual(fired, ["old"]);
+		assert.ok(store.get("fresh"));
+	});
+
 	it("approve 一次 → terminal；重复 decide 幂等 already_handled", () => {
 		const store = new ApprovalStore({ defaultTimeoutMs: 60_000 });
 		store.create({ requestId: "req-1", piId: "a1" });

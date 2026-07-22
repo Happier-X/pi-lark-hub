@@ -63,6 +63,7 @@ Hub features 必须包含 `lark_open` 与 `lark_reset`。
 - 诊断：飞书文本「状态/status」与 Pi `/lark status` 输出脱敏 Hub 摘要；禁止 secret 与完整 openId。
 - HTTP 控制面可配置 control token（`/health` 除外）、body 上限与限流；诊断接口脱敏。不得因 token 而监听非 loopback。
 - Bridge 用户消息 FIFO 有容量与条目 id；飞书 `队列/取消/清空队列` 经 `queue_control` 投递到路由选定的 Pi，结果经 `queue_report` 回传；不可取消已开始执行的 run。
+- 出站 notify 历史可查（`GET /notifications` 的 records）；failed 可显式 `重试`/`POST /control/notify-retry`；审批重试不新建 requestId；不做自动批次续发。
 
 ## 文件
 

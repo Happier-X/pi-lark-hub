@@ -14,6 +14,7 @@ import {
 	formatOnlineList,
 	isListCommand,
 	parseQueueCommand,
+	parseRetryCommand,
 	parseUseCommand,
 	routePlainText,
 	routeUseCommand,
@@ -46,12 +47,15 @@ export type ControlResult = {
 		action: QueueCommand["action"];
 		id?: string;
 	};
+	/** 通知显式重试 requestId 前缀 */
+	notifyRetryRequestId?: string;
 	/** 内部决策，便于测试与日志 */
 	decision:
 		| RouteDecision
 		| { kind: "list" }
 		| { kind: "status" }
 		| { kind: "queue"; action: QueueCommand["action"]; id?: string; piId: string }
+		| { kind: "notify_retry"; requestId: string }
 		| { kind: "reply"; piId: string; messageId: string }
 		| { kind: "reply_unbound"; messageId: string }
 		| { kind: "reply_offline"; piId: string; messageId: string }
@@ -136,6 +140,15 @@ export function handleControlMessage(
 		return {
 			reply: formatHubStatusReport(ctx.getStatusSnapshot()),
 			decision: { kind: "status" },
+		};
+	}
+
+	const retryId = parseRetryCommand(text);
+	if (retryId) {
+		return {
+			reply: `正在重试通知 requestId≈${retryId}…`,
+			notifyRetryRequestId: retryId,
+			decision: { kind: "notify_retry", requestId: retryId },
 		};
 	}
 

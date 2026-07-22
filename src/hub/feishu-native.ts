@@ -83,7 +83,7 @@ export class NativeFeishuTransport implements FeishuTransport {
 		});
 
 		try {
-			let firstId: string | undefined;
+			const ids: string[] = [];
 			for (const content of cardContents) {
 				const r = await this.client.im.message.create({
 					...base,
@@ -91,9 +91,9 @@ export class NativeFeishuTransport implements FeishuTransport {
 				});
 				const id = extractMessageId(r);
 				if (!id) throw new Error("响应缺少 message_id");
-				firstId ??= id;
+				ids.push(id);
 			}
-			return { messageId: firstId! };
+			return { messageId: ids[0]!, messageIds: ids };
 		} catch (cardError) {
 			const cardReason = errorMessage(cardError, this.credentials.appSecret);
 			// 分批卡片只有首批失败时才可安全降级，避免部分卡片后重复发送完整正文。
@@ -104,7 +104,7 @@ export class NativeFeishuTransport implements FeishuTransport {
 
 			try {
 				const textContents = buildPlainTextContents(message.title, message.body);
-				let firstId: string | undefined;
+				const ids: string[] = [];
 				for (const content of textContents) {
 					const r = await this.client.im.message.create({
 						...base,
@@ -112,9 +112,9 @@ export class NativeFeishuTransport implements FeishuTransport {
 					});
 					const id = extractMessageId(r);
 					if (!id) throw new Error("响应缺少 message_id");
-					firstId ??= id;
+					ids.push(id);
 				}
-				return { messageId: firstId! };
+				return { messageId: ids[0]!, messageIds: ids };
 			} catch (textError) {
 				const textReason = errorMessage(textError, this.credentials.appSecret);
 				throw new Error(

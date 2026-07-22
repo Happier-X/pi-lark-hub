@@ -1,0 +1,4 @@
+{"file":"src/hub/notify-store.ts","reason":"历史与重试核心"}
+{"file":"src/hub/server.ts","reason":"HTTP 与 notify 路径"}
+{"file":"src/hub/feishu-transport.ts","reason":"messageIds 结果"}
+{"file":".trellis/spec/backend/multi-pi-lark-hub.md","reason":"合约"}

@@ -50,6 +50,7 @@ describe("NativeFeishuTransport", () => {
 		});
 		assert.deepEqual(await t.send({ title: "标题", body: "正文", event: "task_end" }), {
 			messageId: "om_1",
+			messageIds: ["om_1"],
 		});
 		assert.equal(input.params.receive_id_type, "open_id");
 		assert.equal(input.data.receive_id, "ou_owner");
@@ -146,7 +147,10 @@ describe("NativeFeishuTransport", () => {
 				},
 			},
 		});
-		assert.deepEqual(await t.send({ title: "标题", body: "正文" }), { messageId: "om_text" });
+		assert.deepEqual(await t.send({ title: "标题", body: "正文" }), {
+			messageId: "om_text",
+			messageIds: ["om_text"],
+		});
 		assert.equal(calls.length, 2);
 		assert.equal(calls[0].data.msg_type, "interactive");
 		assert.equal(calls[1].data.msg_type, "text");

@@ -13,7 +13,10 @@ export type FeishuOutboundMessage = {
 };
 
 export type FeishuSendResult = {
+	/** 绑定用：多批时取首条 */
 	messageId: string;
+	/** 全部成功批次的 message_id（可观测；失败批次续发不在本版） */
+	messageIds?: string[];
 };
 
 export interface FeishuTransport {
@@ -41,6 +44,6 @@ export class NoopFeishuTransport implements FeishuTransport {
 	async send(message: FeishuOutboundMessage): Promise<FeishuSendResult> {
 		const messageId = this.idFactory?.() ?? `noop-${++this.seq}`;
 		this.sent.push({ ...message, messageId });
-		return { messageId };
+		return { messageId, messageIds: [messageId] };
 	}
 }

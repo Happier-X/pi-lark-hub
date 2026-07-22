@@ -22,6 +22,11 @@
 - 飞书：`队列` / `取消 <id>` / `清空队列`
 - Pi：`/lark queue` · `/lark cancel <id>` · `/lark clear-queue`
 
+通知历史（内存，TTL/容量限制）：
+
+- `GET /notifications` 返回 `records`（状态、messageIds、脱敏 error），无完整 body。
+- 失败后可 `POST /control/notify-retry` 或飞书 `重试 <requestId前缀>` 显式整单重试；已成功幂等；不做分批续发。
+
 ## HTTP 控制面（本机）
 
 - 默认仅 loopback。可选环境变量 `PI_LARK_HUB_CONTROL_TOKEN`（或配置 `control.token`）：配置后除 `GET /health` 外需 `Authorization: Bearer <token>` 或 `X-Lark-Hub-Token`。

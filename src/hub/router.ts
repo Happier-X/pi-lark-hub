@@ -150,3 +150,11 @@ export function parseQueueCommand(text: string): QueueCommand | null {
 	if (cancel) return { action: "cancel", id: cancel[2]! };
 	return null;
 }
+
+/** 解析「重试 <requestId前缀>」；非该命令返回 null */
+export function parseRetryCommand(text: string): string | null {
+	const t = text.trim();
+	const m = t.match(/^(重试|retry)\s+(\S+)$/i);
+	if (!m) return null;
+	return m[2]!.trim();
+}

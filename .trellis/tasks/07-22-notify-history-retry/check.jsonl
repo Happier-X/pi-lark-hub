@@ -1,0 +1,2 @@
+{"file":".trellis/spec/backend/error-handling.md","reason":"脱敏 fail-closed"}
+{"file":"src/hub/http-guard.ts","reason":"诊断脱敏复用"}

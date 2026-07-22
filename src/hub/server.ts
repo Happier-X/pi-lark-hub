@@ -36,7 +36,7 @@ import {
 	readBodyLimited,
 	redactDiagnosticValue,
 } from "./http-guard.js";
-import { NotifyStore } from "./notify-store.js";
+import { NotifyStore, type NotifyPayload } from "./notify-store.js";
 import { DEFAULT_HEARTBEAT_TIMEOUT_MS, InstanceRegistry } from "./registry.js";
 import type { HubStatusSnapshot } from "./status-report.js";
 
@@ -258,6 +258,90 @@ export async function startHubServer(options: HubServerOptions = {}): Promise<Hu
 		getStatusSnapshot,
 	};
 
+	const dispatchNotifyPayload = async (payload: NotifyPayload) => {
+		return notifyStore.sendIdempotent(payload, async () => {
+			// 审批：先入状态机，再出站卡片（仅首次真正发送时；重试复用同 requestId）
+			if (payload.event === "approval") {
+				approvals.create({
+					requestId: payload.requestId,
+					piId: payload.piId,
+					timeoutMs: payload.timeoutMs,
+					title: payload.title,
+					body: payload.body,
+				});
+			}
+
+			const outbound = {
+				title: payload.title,
+				body: payload.body,
+				piId: payload.piId,
+				event: payload.event,
+				requestId: payload.requestId,
+				actions: payload.actions,
+			};
+
+			const result =
+				payload.event === "approval" && feishu.sendApprovalCard
+					? await feishu.sendApprovalCard(outbound)
+					: await feishu.send(outbound);
+
+			const messageIds =
+				result.messageIds?.length ? result.messageIds : [result.messageId];
+
+			if (payload.event === "approval") {
+				approvals.setMessageId(payload.requestId, result.messageId);
+			}
+
+			for (const mid of messageIds) {
+				bindings.bind({
+					messageId: mid,
+					piId: payload.piId,
+					requestId: payload.requestId,
+					event: payload.event,
+				});
+			}
+
+			return { messageId: result.messageId, messageIds };
+		});
+	};
+
+	const retryNotifyByRequestId = async (
+		requestIdPrefix: string,
+	): Promise<{ ok: boolean; reply: string }> => {
+		const internal = notifyStore.getInternalForRetry(requestIdPrefix);
+		if (!internal) {
+			return { ok: false, reply: `未找到唯一通知记录：${requestIdPrefix}` };
+		}
+		if (internal.status === "sent") {
+			return {
+				ok: true,
+				reply: `通知已发送（幂等）：requestId=${internal.requestId} messageId=${internal.messageId ?? "-"}`,
+			};
+		}
+		if (internal.status === "sending") {
+			return { ok: false, reply: `通知发送中，请稍后：requestId=${internal.requestId}` };
+		}
+		if (!internal.retryPayload) {
+			return {
+				ok: false,
+				reply: `无法本地重试 requestId=${internal.requestId}（无缓存载荷，请让 Pi 重新 notify）`,
+			};
+		}
+		try {
+			const { messageId, reused } = await dispatchNotifyPayload(internal.retryPayload);
+			return {
+				ok: true,
+				reply: `通知重试${reused ? "（幂等）" : "成功"}：requestId=${internal.requestId} messageId=${messageId}`,
+			};
+		} catch (error) {
+			const message = error instanceof Error ? error.message : String(error);
+			return {
+				ok: false,
+				reply: `通知重试失败：requestId=${internal.requestId} ${message}`,
+			};
+		}
+	};
+
 	const handleNotify = async (client: ClientState, m: NotifyMessage) => {
 		if (!client.piId || m.piId !== client.piId) {
 			safeSend(client.socket, {
@@ -272,7 +356,7 @@ export async function startHubServer(options: HubServerOptions = {}): Promise<Hu
 		);
 
 		try {
-			const payload = {
+			const payload: NotifyPayload = {
 				piId: m.piId,
 				requestId: m.requestId,
 				event: m.event,
@@ -282,45 +366,7 @@ export async function startHubServer(options: HubServerOptions = {}): Promise<Hu
 				timeoutMs: m.timeoutMs,
 			};
 
-			const { messageId, reused } = await notifyStore.sendIdempotent(payload, async () => {
-				// 审批：先入状态机，再出站卡片（仅首次真正发送时）
-				if (m.event === "approval") {
-					approvals.create({
-						requestId: m.requestId,
-						piId: m.piId,
-						timeoutMs: m.timeoutMs,
-						title: m.title,
-						body: m.body,
-					});
-				}
-
-				const outbound = {
-					title: m.title,
-					body: m.body,
-					piId: m.piId,
-					event: m.event,
-					requestId: m.requestId,
-					actions: m.actions,
-				};
-
-				const result =
-					m.event === "approval" && feishu.sendApprovalCard
-						? await feishu.sendApprovalCard(outbound)
-						: await feishu.send(outbound);
-
-				if (m.event === "approval") {
-					approvals.setMessageId(m.requestId, result.messageId);
-				}
-
-				bindings.bind({
-					messageId: result.messageId,
-					piId: m.piId,
-					requestId: m.requestId,
-					event: m.event,
-				});
-
-				return result.messageId;
-			});
+			const { messageId, reused } = await dispatchNotifyPayload(payload);
 
 			safeSend(client.socket, {
 				type: "notify_ack",
@@ -633,6 +679,7 @@ export async function startHubServer(options: HubServerOptions = {}): Promise<Hu
 				res,
 				200,
 				redactDiagnosticValue({
+					records: notifyStore.list(100),
 					bindings: bindings.list(),
 					history,
 				}),
@@ -693,6 +740,33 @@ export async function startHubServer(options: HubServerOptions = {}): Promise<Hu
 			return;
 		}
 
+		if (method === "POST" && pathname === "/control/notify-retry") {
+			let body: string;
+			try {
+				body = await readBodyLimited(req, controlCfg.bodyMaxBytes);
+			} catch (e) {
+				if (e instanceof BodyTooLargeError) {
+					json(res, 413, { ok: false, error: e.message });
+					return;
+				}
+				throw e;
+			}
+			let payload: { requestId?: string; openId?: string };
+			try {
+				payload = JSON.parse(body || "{}") as typeof payload;
+			} catch {
+				json(res, 400, { ok: false, error: "invalid JSON" });
+				return;
+			}
+			if (!isAuthorized(payload.openId)) {
+				json(res, 403, { ok: false, error: "unauthorized" });
+				return;
+			}
+			const out = await retryNotifyByRequestId(payload.requestId ?? "");
+			json(res, out.ok ? 200 : 409, out);
+			return;
+		}
+
 		if (method === "POST" && pathname === "/control/message") {
 			let body: string;
 			try {
@@ -735,6 +809,7 @@ export async function startHubServer(options: HubServerOptions = {}): Promise<Hu
 				"GET /approvals",
 				"POST /control/message",
 				"POST /control/approval",
+				"POST /control/notify-retry",
 				"WS /",
 			],
 		});
@@ -898,6 +973,15 @@ export async function startHubServer(options: HubServerOptions = {}): Promise<Hu
 					? result.reply
 					: `目标 Pi ${qc.piId} 连接不可用，队列指令未投递。`,
 				deliveredTo: delivered ? qc.piId : null,
+				decision: result.decision,
+			};
+		}
+
+		if (result.notifyRetryRequestId) {
+			const out = await retryNotifyByRequestId(result.notifyRetryRequestId);
+			return {
+				ok: out.ok,
+				reply: out.reply,
 				decision: result.decision,
 			};
 		}

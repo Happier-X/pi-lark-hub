@@ -17,6 +17,7 @@ import {
 	formatOnlineList,
 	isListCommand,
 	parseQueueCommand,
+	parseRetryCommand,
 	parseUseCommand,
 	routePlainText,
 	routeUseCommand,
@@ -141,6 +142,12 @@ describe("command parsers", () => {
 		assert.deepEqual(parseQueueCommand("清空队列"), { action: "clear" });
 		assert.deepEqual(parseQueueCommand("取消 qab1"), { action: "cancel", id: "qab1" });
 		assert.equal(parseQueueCommand("取消"), null);
+	});
+
+	it("parseRetryCommand", () => {
+		assert.equal(parseRetryCommand("重试 req-ab"), "req-ab");
+		assert.equal(parseRetryCommand("retry x1"), "x1");
+		assert.equal(parseRetryCommand("重试"), null);
 	});
 });
 

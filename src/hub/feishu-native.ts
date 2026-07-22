@@ -1,7 +1,7 @@
 import * as Lark from "@larksuiteoapi/node-sdk";
 import type { FeishuCredentials } from "./credentials.js";
 import type { InboundControlHandlers } from "./feishu-native-inbound.js";
-import { parseInboundEvent } from "./feishu-native-inbound.js";
+import { parseCardActionTrigger, parseInboundEvent } from "./feishu-native-inbound.js";
 import {
 	buildInteractiveCardContents,
 	buildPlainTextContents,
@@ -71,8 +71,15 @@ export class NativeFeishuTransport implements FeishuTransport {
 			data: { receive_id: receiveId },
 		};
 
+		const decisions = (message.actions ?? []).filter(
+			(a): a is "approve" | "reject" => a === "approve" || a === "reject",
+		);
 		const cardContents = buildInteractiveCardContents(message.title, message.body, {
 			template: templateForEvent(message.event),
+			approvalActions:
+				message.event === "approval" && message.requestId && decisions.length > 0
+					? { requestId: message.requestId, decisions }
+					: undefined,
 		});
 
 		try {
@@ -121,6 +128,15 @@ export class NativeFeishuTransport implements FeishuTransport {
 		const r = await this.client.request?.({ method: "GET", url: "/open-apis/bot/v3/info" });
 		return r?.bot?.open_id ?? r?.data?.bot?.open_id;
 	}
+
+	/** 审批卡片：与 send 同路径（含按钮） */
+	async sendApprovalCard(message: FeishuOutboundMessage): Promise<FeishuSendResult> {
+		return this.send({
+			...message,
+			event: message.event ?? "approval",
+			actions: message.actions?.length ? message.actions : ["approve", "reject"],
+		});
+	}
 }
 
 export type NativeWsConnectionState = "idle" | "connecting" | "connected" | "reconnecting" | "failed";
@@ -155,6 +171,7 @@ export class NativeFeishuWsInbound {
 			options.dispatcher ??
 			new Lark.EventDispatcher({}).register({
 				"im.message.receive_v1": (raw: unknown) => void this.accept(raw),
+				"card.action.trigger": (raw: unknown) => this.acceptCardAction(raw),
 			});
 		this.ws =
 			options.ws ??
@@ -213,4 +230,36 @@ export class NativeFeishuWsInbound {
 			this.log(`[feishu-native] 入站处理失败：${e instanceof Error ? e.message : String(e)}`);
 		}
 	}
+
+	async acceptCardAction(raw: unknown): Promise<Record<string, unknown>> {
+		const action = parseCardActionTrigger(raw);
+		if (!action) {
+			return cardActionToast("warning", "无法识别的卡片操作");
+		}
+		if (!this.handlers.onApprovalAction) {
+			return cardActionToast("warning", "Hub 未启用审批回调");
+		}
+		try {
+			const r = await this.handlers.onApprovalAction({
+				requestId: action.requestId,
+				decision: action.decision,
+				openId: action.openId,
+			});
+			const ok = r.ok;
+			return cardActionToast(ok ? "success" : "error", r.reply || (ok ? "已处理" : "处理失败"));
+		} catch (e) {
+			const message = e instanceof Error ? e.message : String(e);
+			this.log(`[feishu-native] 卡片审批回调失败：${message}`);
+			return cardActionToast("error", "审批处理异常");
+		}
+	}
+}
+
+function cardActionToast(type: "info" | "success" | "error" | "warning", content: string) {
+	return {
+		toast: {
+			type,
+			content: content.slice(0, 200),
+		},
+	};
 }

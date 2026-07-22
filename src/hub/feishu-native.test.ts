@@ -5,6 +5,34 @@ import { NativeFeishuTransport, NativeFeishuWsInbound } from "./feishu-native.js
 const credentials = { appId: "cli_x", appSecret: "secret", brand: "feishu" as const, updatedAt: 1 };
 
 describe("NativeFeishuTransport", () => {
+	it("审批卡片含 action 按钮", async () => {
+		let input: any;
+		const t = new NativeFeishuTransport(credentials, {
+			userId: "ou_owner",
+			client: {
+				im: {
+					message: {
+						create: async (v: unknown) => {
+							input = v;
+							return { data: { message_id: "om_appr" } };
+						},
+					},
+				},
+			},
+		});
+		await t.sendApprovalCard({
+			title: "审批",
+			body: "危险命令",
+			event: "approval",
+			requestId: "req-btn",
+			actions: ["approve", "reject"],
+		});
+		const card = JSON.parse(input.data.content) as {
+			elements: Array<{ tag: string; actions?: unknown[] }>;
+		};
+		assert.ok(card.elements.some((e) => e.tag === "action"));
+	});
+
 	it("优先发送 interactive 卡片并返回真实 message_id", async () => {
 		let input: any;
 		const t = new NativeFeishuTransport(credentials, {

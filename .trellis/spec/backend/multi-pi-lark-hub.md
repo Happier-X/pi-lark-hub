@@ -59,6 +59,7 @@ Hub features 必须包含 `lark_open` 与 `lark_reset`。
 - 单 Pi 自动默认；多 Pi 无默认提示选择；`列表`、`使用 <id|名称>` 由 Hub 处理。
 - 远程文本必须调用 `pi.sendUserMessage(text)`；忙时使用扩展 FIFO。
 - 审批按 requestId 精确投递并保持幂等，禁止离线改投。
+- 审批卡片可含批准/拒绝按钮；回调 `card.action.trigger` 经长连接接收，operator open_id 必须过主人鉴权；文本「批准/拒绝」命令保留。
 
 ## 文件
 

@@ -41,6 +41,21 @@ describe("templateForEvent", () => {
 });
 
 describe("buildInteractiveCardContent", () => {
+	it("审批 actions 仅出现在第一张卡片", () => {
+		const contents = buildInteractiveCardContents("审", "正文", {
+			template: "orange",
+			approvalActions: { requestId: "req-1", decisions: ["approve", "reject"] },
+		});
+		const card = JSON.parse(contents[0]!) as {
+			elements: Array<{ tag: string; actions?: Array<{ value: { requestId: string; decision: string } }> }>;
+		};
+		const action = card.elements.find((e) => e.tag === "action");
+		assert.ok(action);
+		assert.equal(action!.actions?.length, 2);
+		assert.equal(action!.actions?.[0]?.value.requestId, "req-1");
+		assert.equal(action!.actions?.[0]?.value.decision, "approve");
+	});
+
 	it("普通正文：header + markdown 结构", () => {
 		const raw = buildInteractiveCardContent("标题", "正文");
 		const card = JSON.parse(raw) as {

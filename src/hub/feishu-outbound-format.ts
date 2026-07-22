@@ -25,7 +25,43 @@ export type BuildInteractiveCardOptions = {
 export type CardContentOptions = BuildInteractiveCardOptions & {
 	maxBytes?: number;
 	maxElements?: number;
+	/** 审批按钮：仅挂在第一张卡片末尾 */
+	approvalActions?: {
+		requestId: string;
+		decisions: Array<"approve" | "reject">;
+	};
 };
+
+/** 按钮 value 约定（卡片回调解析） */
+export type ApprovalCardActionValue = {
+	v: 1;
+	kind: "approval";
+	requestId: string;
+	decision: "approve" | "reject";
+};
+
+export function buildApprovalActionValue(
+	requestId: string,
+	decision: "approve" | "reject",
+): ApprovalCardActionValue {
+	return { v: 1, kind: "approval", requestId, decision };
+}
+
+export function buildApprovalActionElement(
+	requestId: string,
+	decisions: Array<"approve" | "reject">,
+): { tag: "action"; actions: unknown[] } {
+	const buttons = decisions.map((decision) => ({
+		tag: "button",
+		text: {
+			tag: "plain_text",
+			content: decision === "approve" ? "批准" : "拒绝",
+		},
+		type: decision === "approve" ? "primary" : "danger",
+		value: buildApprovalActionValue(requestId, decision),
+	}));
+	return { tag: "action", actions: buttons };
+}
 
 export function templateForEvent(event?: string): CardTemplate {
 	if (event === "task_end") return "green";
@@ -89,11 +125,18 @@ function headerTitle(title: string | undefined, part: number, total: number): st
 	return total > 1 ? `${base}（第 ${part}/${total} 部分）` : base;
 }
 
-function cardObject(title: string, parts: string[], template: CardTemplate) {
+function cardObject(
+	title: string,
+	parts: string[],
+	template: CardTemplate,
+	actionElement?: { tag: "action"; actions: unknown[] },
+) {
+	const elements: unknown[] = parts.map((content) => ({ tag: "markdown", content }));
+	if (actionElement) elements.push(actionElement);
 	return {
 		config: { wide_screen_mode: true },
 		header: { title: { tag: "plain_text", content: title }, template },
-		elements: parts.map((content) => ({ tag: "markdown", content })),
+		elements,
 	};
 }
 
@@ -107,6 +150,16 @@ export function buildInteractiveCardContents(
 	const maxLength = options.maxLength ?? CARD_MARKDOWN_MAX;
 	const maxBytes = options.maxBytes ?? CARD_MESSAGE_MAX_BYTES;
 	const maxElements = options.maxElements ?? CARD_MAX_MARKDOWN_ELEMENTS;
+	const template = options.template ?? "blue";
+	const actionEl =
+		options.approvalActions &&
+		options.approvalActions.requestId.trim() &&
+		options.approvalActions.decisions.length > 0
+			? buildApprovalActionElement(
+					options.approvalActions.requestId.trim(),
+					options.approvalActions.decisions,
+			  )
+			: undefined;
 	const rawBody = body?.trim() ? body : "（无正文）";
 	const chunks = splitText(rawBody, maxLength);
 	const groups: string[][] = [];
@@ -115,7 +168,9 @@ export function buildInteractiveCardContents(
 		const candidate = [...current, chunk];
 		const total = Math.ceil(chunks.length / Math.max(1, maxElements));
 		const titleText = headerTitle(title, groups.length + 1, total);
-		const candidateCard = JSON.stringify(cardObject(titleText, candidate, options.template ?? "blue"));
+		// 估算时对首卡预留 action，避免最后装不下
+		const withAction = groups.length === 0 ? actionEl : undefined;
+		const candidateCard = JSON.stringify(cardObject(titleText, candidate, template, withAction));
 		if (current.length > 0 && (current.length >= maxElements || Buffer.byteLength(candidateCard, "utf8") > maxBytes)) {
 			groups.push([chunk]);
 		} else if (current.length === 0 && Buffer.byteLength(candidateCard, "utf8") > maxBytes && chunk.length > 1) {
@@ -129,7 +184,16 @@ export function buildInteractiveCardContents(
 		}
 	}
 	const total = groups.length;
-	const contents = groups.map((parts, index) => JSON.stringify(cardObject(headerTitle(title, index + 1, total), parts, options.template ?? "blue")));
+	const contents = groups.map((parts, index) =>
+		JSON.stringify(
+			cardObject(
+				headerTitle(title, index + 1, total),
+				parts,
+				template,
+				index === 0 ? actionEl : undefined,
+			),
+		),
+	);
 	if (contents.some((content) => Buffer.byteLength(content, "utf8") > maxBytes)) {
 		throw new Error("飞书卡片消息体超过限制");
 	}

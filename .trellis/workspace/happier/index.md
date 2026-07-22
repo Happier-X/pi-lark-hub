@@ -8,8 +8,8 @@
 
 <!-- @@@auto:current-status -->
 - **Active File**: `journal-1.md`
-- **Total Sessions**: 12
-- **Last Active**: 2026-07-21
+- **Total Sessions**: 13
+- **Last Active**: 2026-07-22
 <!-- @@@/auto:current-status -->
 
 ---
@@ -19,7 +19,7 @@
 <!-- @@@auto:active-documents -->
 | File | Lines | Status |
 |------|-------|--------|
-| `journal-1.md` | ~415 | Active |
+| `journal-1.md` | ~459 | Active |
 <!-- @@@/auto:active-documents -->
 
 ---
@@ -29,6 +29,7 @@
 <!-- @@@auto:session-history -->
 | # | Date | Title | Commits | Branch |
 |---|------|-------|---------|--------|
+| 13 | 2026-07-22 | 路线图逐项落地：P0 到 e2e/CI | `2635e30`, `dd555d8`, `830e54a`, `2bdab94`, `bd58dff`, `8405e8c`, `5f492b5`, `f99ea02`, `53f5822`, `828e19f`, `6218a72`, `3be9de4` | `main` |
 | 12 | 2026-07-21 | 飞书出站卡片 Markdown 渲染 | `48bd132`, `780b848`, `dba8ab6` | `main` |
 | 11 | 2026-07-20 | 统一飞书原生扫码入口 | `6ae5672`, `6198191`, `1ea77ee` | `main` |
 | 10 | 2026-07-18 | 自动重启过期本机 Hub | `36aeaaa`, `0c9ad63`, `b22db46` | `main` |

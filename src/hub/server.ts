@@ -28,6 +28,14 @@ import { NativeFeishuTransport } from "./feishu-native.js";
 import { handleControlApproval, handleControlMessage } from "./control.js";
 import type { FeishuTransport } from "./feishu-transport.js";
 import { NoopFeishuTransport } from "./feishu-transport.js";
+import {
+	BodyTooLargeError,
+	FixedWindowRateLimiter,
+	authorizeControlHttp,
+	extractControlToken,
+	readBodyLimited,
+	redactDiagnosticValue,
+} from "./http-guard.js";
 import { NotifyStore } from "./notify-store.js";
 import { DEFAULT_HEARTBEAT_TIMEOUT_MS, InstanceRegistry } from "./registry.js";
 import type { HubStatusSnapshot } from "./status-report.js";
@@ -56,6 +64,8 @@ export type HubServerOptions = {
 	allowedOpenIds?: string[];
 	/** 用于落盘绑定的配置路径/基线 */
 	hubConfig?: HubConfig;
+	/** 覆盖控制面 token（优先于 hubConfig.control.token） */
+	controlToken?: string;
 	log?: (line: string) => void;
 	/** 扫码注册客户端（测试可注入） */
 	registration?: FeishuRegistrationClient;
@@ -123,6 +133,16 @@ export async function startHubServer(options: HubServerOptions = {}): Promise<Hu
 	const notifyStore = new NotifyStore();
 	const allowed = new Set(options.allowedOpenIds ?? []);
 	let hubConfigSnapshot = options.hubConfig;
+	const controlCfg = {
+		token: options.controlToken ?? options.hubConfig?.control?.token,
+		bodyMaxBytes: options.hubConfig?.control?.bodyMaxBytes ?? 64 * 1024,
+		rateLimit: options.hubConfig?.control?.rateLimit ?? 60,
+		rateWindowMs: options.hubConfig?.control?.rateWindowMs ?? 60_000,
+	};
+	const httpRateLimiter = new FixedWindowRateLimiter({
+		limit: controlCfg.rateLimit,
+		windowMs: controlCfg.rateWindowMs,
+	});
 
 
 	const registry = new InstanceRegistry({
@@ -532,8 +552,26 @@ export async function startHubServer(options: HubServerOptions = {}): Promise<Hu
 	): Promise<void> {
 		const url = new URL(req.url ?? "/", `http://${host}:${port}`);
 		const method = req.method ?? "GET";
+		const pathname = url.pathname;
 
-		if (method === "GET" && url.pathname === "/health") {
+		const rate = httpRateLimiter.tryConsume();
+		if (!rate.ok) {
+			res.setHeader("Retry-After", String(Math.ceil(rate.retryAfterMs / 1000) || 1));
+			json(res, 429, { ok: false, error: "rate limit exceeded" });
+			return;
+		}
+
+		const auth = authorizeControlHttp({
+			pathname,
+			expectedToken: controlCfg.token,
+			providedToken: extractControlToken(req),
+		});
+		if (!auth.ok) {
+			json(res, auth.status, { ok: false, error: auth.error });
+			return;
+		}
+
+		if (method === "GET" && pathname === "/health") {
 			const snap = getStatusSnapshot();
 			json(res, 200, {
 				ok: true,
@@ -552,37 +590,59 @@ export async function startHubServer(options: HubServerOptions = {}): Promise<Hu
 				credentialsPresent: snap.credentialsPresent,
 				credentialsUpdatedAt: snap.credentialsUpdatedAt,
 				nativeWsAttached: snap.nativeWsAttached,
+				controlTokenRequired: Boolean(controlCfg.token),
 			});
 			return;
 		}
 
-		if (method === "GET" && url.pathname === "/instances") {
-			json(res, 200, {
-				defaultPiId: registry.getDefaultPiId(),
-				instances: registry.listSnapshots(),
-			});
+		if (method === "GET" && pathname === "/instances") {
+			json(
+				res,
+				200,
+				redactDiagnosticValue({
+					defaultPiId: registry.getDefaultPiId(),
+					instances: registry.listSnapshots(),
+				}),
+			);
 			return;
 		}
 
-		if (method === "GET" && url.pathname === "/notifications") {
+		if (method === "GET" && pathname === "/notifications") {
 			const history = readTransportHistory(feishu, bindings);
-			json(res, 200, {
-				bindings: bindings.list(),
-				history,
-			});
+			json(
+				res,
+				200,
+				redactDiagnosticValue({
+					bindings: bindings.list(),
+					history,
+				}),
+			);
 			return;
 		}
 
-		if (method === "GET" && url.pathname === "/approvals") {
-			json(res, 200, {
-				pending: approvals.listPending(),
-				all: approvals.list(),
-			});
+		if (method === "GET" && pathname === "/approvals") {
+			json(
+				res,
+				200,
+				redactDiagnosticValue({
+					pending: approvals.listPending(),
+					all: approvals.list(),
+				}),
+			);
 			return;
 		}
 
-		if (method === "POST" && url.pathname === "/control/approval") {
-			const body = await readBody(req);
+		if (method === "POST" && pathname === "/control/approval") {
+			let body: string;
+			try {
+				body = await readBodyLimited(req, controlCfg.bodyMaxBytes);
+			} catch (e) {
+				if (e instanceof BodyTooLargeError) {
+					json(res, 413, { ok: false, error: e.message });
+					return;
+				}
+				throw e;
+			}
 			let payload: {
 				requestId?: string;
 				decision?: string;
@@ -613,8 +673,17 @@ export async function startHubServer(options: HubServerOptions = {}): Promise<Hu
 			return;
 		}
 
-		if (method === "POST" && url.pathname === "/control/message") {
-			const body = await readBody(req);
+		if (method === "POST" && pathname === "/control/message") {
+			let body: string;
+			try {
+				body = await readBodyLimited(req, controlCfg.bodyMaxBytes);
+			} catch (e) {
+				if (e instanceof BodyTooLargeError) {
+					json(res, 413, { ok: false, error: e.message });
+					return;
+				}
+				throw e;
+			}
 			let payload: { text?: string; openId?: string; replyToMessageId?: string };
 			try {
 				payload = JSON.parse(body || "{}") as {
@@ -912,11 +981,4 @@ function json(res: http.ServerResponse, status: number, body: unknown): void {
 	res.end(JSON.stringify(body, null, 2));
 }
 
-function readBody(req: http.IncomingMessage): Promise<string> {
-	return new Promise((resolve, reject) => {
-		const chunks: Buffer[] = [];
-		req.on("data", (c) => chunks.push(Buffer.isBuffer(c) ? c : Buffer.from(c)));
-		req.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")));
-		req.on("error", reject);
-	});
-}
+

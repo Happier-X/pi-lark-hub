@@ -12,6 +12,14 @@ import { DEFAULT_HUB_HOST, DEFAULT_HUB_PORT } from "./server.js";
 export type FeishuMode = "native" | (string & {});
 export type FeishuAs = "bot" | "user";
 
+export type HubControlConfig = {
+	/** 非空时 HTTP 控制/诊断接口需 Bearer 或 X-Lark-Hub-Token；/health 除外 */
+	token?: string;
+	bodyMaxBytes: number;
+	rateLimit: number;
+	rateWindowMs: number;
+};
+
 export type HubConfig = {
 	host: "127.0.0.1";
 	port: number;
@@ -27,6 +35,8 @@ export type HubConfig = {
 	};
 	/** 完成开局后为 true；未配置状态允许 Hub 启动等待 `/lark` */
 	requireAllowlist: boolean;
+	/** HTTP 控制面防护 */
+	control: HubControlConfig;
 	/** 实际加载的配置文件路径（若有） */
 	configPath?: string;
 };
@@ -42,6 +52,12 @@ export type HubConfigFile = {
 		chatId?: string;
 	};
 	requireAllowlist?: boolean;
+	control?: {
+		token?: string;
+		bodyMaxBytes?: number;
+		rateLimit?: number;
+		rateWindowMs?: number;
+	};
 };
 
 export type LoadHubConfigOptions = {
@@ -71,6 +87,11 @@ export function createDefaultHubConfig(): HubConfig {
 			as: "bot",
 		},
 		requireAllowlist: false,
+		control: {
+			bodyMaxBytes: 64 * 1024,
+			rateLimit: 60,
+			rateWindowMs: 60_000,
+		},
 	};
 }
 
@@ -147,6 +168,7 @@ export function loadHubConfig(options: LoadHubConfigOptions = {}): HubConfig {
 	const merged: HubConfig = {
 		...base,
 		feishu: { ...base.feishu },
+		control: { ...base.control },
 		configPath: fromFile ? configPath : options.configPath ?? envConfigPath,
 	};
 
@@ -175,6 +197,9 @@ export function loadHubConfig(options: LoadHubConfigOptions = {}): HubConfig {
 				merged.feishu.chatId = c || undefined;
 			}
 		}
+		if (fromFile.control) {
+			applyControlConfig(merged.control, fromFile.control);
+		}
 		// 文件存在时记录路径
 		merged.configPath = configPath;
 	}
@@ -197,6 +222,17 @@ export function loadHubConfig(options: LoadHubConfigOptions = {}): HubConfig {
 		const c = env.PI_LARK_FEISHU_CHAT_ID.trim();
 		merged.feishu.chatId = c || undefined;
 	}
+
+	if (env.PI_LARK_HUB_CONTROL_TOKEN !== undefined) {
+		const t = env.PI_LARK_HUB_CONTROL_TOKEN.trim();
+		merged.control.token = t || undefined;
+	}
+	const envBodyMax = parsePositiveInt(env.PI_LARK_HUB_BODY_MAX_BYTES);
+	if (envBodyMax !== undefined) merged.control.bodyMaxBytes = envBodyMax;
+	const envRate = parsePositiveInt(env.PI_LARK_HUB_RATE_LIMIT);
+	if (envRate !== undefined) merged.control.rateLimit = envRate;
+	const envWindow = parsePositiveInt(env.PI_LARK_HUB_RATE_WINDOW_MS);
+	if (envWindow !== undefined) merged.control.rateWindowMs = envWindow;
 
 	if (env.PI_LARK_REQUIRE_ALLOWLIST !== undefined) {
 		const v = env.PI_LARK_REQUIRE_ALLOWLIST.trim().toLowerCase();
@@ -384,9 +420,39 @@ export function formatConfigSummary(config: HubConfig): string {
 		`feishu.mode=${config.feishu.mode} as=${config.feishu.as} ${recipient}`,
 		`allowedOpenIds=${idSummary}`,
 		`requireAllowlist=${config.requireAllowlist}`,
+		`control.token=${config.control.token ? "已配置" : "未配置"} bodyMax=${config.control.bodyMaxBytes} rate=${config.control.rateLimit}/${config.control.rateWindowMs}ms`,
 		config.configPath ? `configPath=${config.configPath}` : "configPath=（默认/无文件）",
 	];
 	return lines.join("\n");
+}
+
+function parsePositiveInt(raw: string | undefined): number | undefined {
+	if (raw === undefined || raw === "") return undefined;
+	const n = Number(raw);
+	if (!Number.isFinite(n) || n <= 0) throw new Error(`无效正整数: ${raw}`);
+	return Math.floor(n);
+}
+
+function applyControlConfig(
+	target: HubControlConfig,
+	source: NonNullable<HubConfigFile["control"]>,
+): void {
+	if (source.token !== undefined) {
+		const t = String(source.token).trim();
+		target.token = t || undefined;
+	}
+	if (source.bodyMaxBytes !== undefined) {
+		const n = Number(source.bodyMaxBytes);
+		if (Number.isFinite(n) && n > 0) target.bodyMaxBytes = Math.floor(n);
+	}
+	if (source.rateLimit !== undefined) {
+		const n = Number(source.rateLimit);
+		if (Number.isFinite(n) && n > 0) target.rateLimit = Math.floor(n);
+	}
+	if (source.rateWindowMs !== undefined) {
+		const n = Number(source.rateWindowMs);
+		if (Number.isFinite(n) && n > 0) target.rateWindowMs = Math.floor(n);
+	}
 }
 
 function redactOpenId(id: string): string {

@@ -17,6 +17,13 @@
 
 诊断：在 Pi 执行 `/lark status`，或在飞书对机器人发送 `状态` / `status`，可查看脱敏后的版本、绑定、凭证落盘时间、在线 Pi、待审批数与修复建议。
 
+## HTTP 控制面（本机）
+
+- 默认仅 loopback。可选环境变量 `PI_LARK_HUB_CONTROL_TOKEN`（或配置 `control.token`）：配置后除 `GET /health` 外需 `Authorization: Bearer <token>` 或 `X-Lark-Hub-Token`。
+- 请求体默认上限 64KB（`PI_LARK_HUB_BODY_MAX_BYTES`）；超限返回 413。
+- 固定窗口限流默认 60 次/分钟（`PI_LARK_HUB_RATE_LIMIT` / `PI_LARK_HUB_RATE_WINDOW_MS`）；超限 429。
+- `/instances`、`/notifications`、`/approvals` 响应会截断长 body 并脱敏 secret 字段名。
+
 ## 重置
 
 执行 `/lark reset`：

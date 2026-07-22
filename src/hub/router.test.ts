@@ -219,6 +219,7 @@ describe("handleControlMessage", () => {
 			cwd: "/tmp/s",
 			pid: 1,
 			capabilities: [],
+			connectionId: "c-s",
 		});
 		const r = handleControlMessage(
 			{
